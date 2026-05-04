@@ -4,7 +4,7 @@ services:
     env_file:
       - .env
     volumes:
-      - tradingagents_data:/home/appuser/.tradingagents
+      - tradingagents_data:/root/trading-agents/TradingAgents/.tradingagents
     tty: true
     stdin_open: true
 
@@ -12,8 +12,16 @@ services:
     image: ollama/ollama:latest
     volumes:
       - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
     profiles:
       - ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
 
   tradingagents-ollama:
     build: .
@@ -21,10 +29,12 @@ services:
       - .env
     environment:
       - LLM_PROVIDER=ollama
+      - TRADINGAGENTS_BACKEND_URL=http://ollama:11434/v1
     volumes:
-      - tradingagents_data:/home/appuser/.tradingagents
+      - tradingagents_data:/root/trading-agents/TradingAgents/.tradingagents
     depends_on:
-      - ollama
+      ollama:
+        condition: service_healthy
     tty: true
     stdin_open: true
     profiles:

@@ -151,6 +151,9 @@ export ALPHA_VANTAGE_API_KEY=...   # Alpha Vantage
 For enterprise providers (e.g. Azure OpenAI, AWS Bedrock), copy `.env.enterprise.example` to `.env.enterprise` and fill in your credentials.
 
 For local models, configure Ollama with `llm_provider: "ollama"` in your config.
+When running inside Docker, `tradingagents-ollama` sets
+`TRADINGAGENTS_BACKEND_URL=http://ollama:11434/v1` automatically so the app
+talks to the Compose service instead of `localhost`.
 
 Alternatively, copy `.env.example` to `.env` and fill in your keys:
 ```bash

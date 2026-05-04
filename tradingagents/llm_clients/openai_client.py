@@ -6,6 +6,7 @@ from langchain_openai import ChatOpenAI
 
 from .base_client import BaseLLMClient, normalize_content
 from .validators import validate_model
+from .provider_urls import get_ollama_base_url
 
 
 class NormalizedChatOpenAI(ChatOpenAI):
@@ -116,7 +117,7 @@ _PROVIDER_CONFIG = {
     "qwen": ("https://dashscope-intl.aliyuncs.com/compatible-mode/v1", "DASHSCOPE_API_KEY"),
     "glm": ("https://api.z.ai/api/paas/v4/", "ZHIPU_API_KEY"),
     "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
-    "ollama": ("http://localhost:11434/v1", None),
+    "ollama": (get_ollama_base_url, None),
 }
 
 
@@ -149,7 +150,7 @@ class OpenAIClient(BaseLLMClient):
         # provider default so users can route through their own gateway.
         if self.provider in _PROVIDER_CONFIG:
             default_base, api_key_env = _PROVIDER_CONFIG[self.provider]
-            llm_kwargs["base_url"] = self.base_url or default_base
+            llm_kwargs["base_url"] = self.base_url or (default_base() if callable(default_base) else default_base)
             if api_key_env:
                 api_key = os.environ.get(api_key_env)
                 if api_key:

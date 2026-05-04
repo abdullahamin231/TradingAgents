@@ -5,6 +5,7 @@ from rich.console import Console
 
 from cli.models import AnalystType
 from tradingagents.llm_clients.model_catalog import get_model_options
+from tradingagents.llm_clients.provider_urls import get_ollama_base_url
 
 console = Console()
 
@@ -230,6 +231,17 @@ def select_deep_thinking_agent(provider) -> str:
 
 def select_llm_provider() -> tuple[str, str | None]:
     """Select the LLM provider and its API endpoint."""
+    import os
+
+    env_provider = os.getenv("LLM_PROVIDER")
+    if env_provider:
+        provider_key = env_provider.strip().lower()
+        if provider_key == "ollama":
+            backend_url = get_ollama_base_url()
+        else:
+            backend_url = os.getenv("TRADINGAGENTS_BACKEND_URL")
+        return provider_key, backend_url
+
     # (display_name, provider_key, base_url)
     PROVIDERS = [
         ("OpenAI", "openai", "https://api.openai.com/v1"),
@@ -241,7 +253,7 @@ def select_llm_provider() -> tuple[str, str | None]:
         ("GLM", "glm", "https://open.bigmodel.cn/api/paas/v4/"),
         ("OpenRouter", "openrouter", "https://openrouter.ai/api/v1"),
         ("Azure OpenAI", "azure", None),
-        ("Ollama", "ollama", "http://localhost:11434/v1"),
+        ("Ollama", "ollama", get_ollama_base_url()),
     ]
 
     choice = questionary.select(
