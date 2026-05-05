@@ -50,4 +50,9 @@ def create_llm_client(
         from .azure_client import AzureOpenAIClient
         return AzureOpenAIClient(model, base_url, **kwargs)
 
+    if provider_lower in {"opencode", "binary"}:
+        from .opencode_client import OpenCodeClient
+        provider_name = "opencode" if provider_lower == "opencode" else provider_lower
+        return OpenCodeClient(model, base_url, provider=provider_name, **kwargs)
+
     raise ValueError(f"Unsupported LLM provider: {provider}")

@@ -1,4 +1,5 @@
 import importlib
+import os
 import unittest
 from unittest.mock import patch
 
@@ -50,6 +51,22 @@ class TestOllamaBackendUrl(unittest.TestCase):
             reloaded = importlib.reload(default_config)
 
         self.assertEqual(reloaded.DEFAULT_CONFIG["backend_url"], "http://ollama:11434/v1")
+
+    def test_default_config_keeps_storage_under_reports_by_default(self):
+        with patch.dict("os.environ", {}, clear=True):
+            import tradingagents.default_config as default_config
+
+            reloaded = importlib.reload(default_config)
+
+        results_dir = reloaded.DEFAULT_CONFIG["results_dir"]
+        self.assertEqual(
+            reloaded.DEFAULT_CONFIG["data_cache_dir"],
+            os.path.join(results_dir, "cache"),
+        )
+        self.assertEqual(
+            reloaded.DEFAULT_CONFIG["memory_log_path"],
+            os.path.join(results_dir, "memory", "trading_memory.md"),
+        )
 
     def test_get_ollama_base_url_uses_docker_hostname_when_unset(self):
         with patch.dict("os.environ", {}, clear=True), patch("os.path.exists", return_value=True):
