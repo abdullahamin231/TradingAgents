@@ -7,14 +7,15 @@ const reportSelect = document.querySelector("#report-select");
 const tickerSummary = document.querySelector("#ticker-summary");
 const reportTitle = document.querySelector("#report-title");
 const reportView = document.querySelector("#report-view");
+const sharedDateInput = document.querySelector("#shared-date");
+const composerMessage = document.querySelector("#composer-message");
 
-function createRunRow(initialTicker = "", initialDate = window.TRADINGAGENTS_DEFAULT_DATE) {
+function createRunRow(initialTicker = "") {
   const row = document.createElement("div");
   row.className = "run-row";
   row.innerHTML = `
-    <input class="ticker-input" type="text" placeholder="Ticker (e.g. NVDA)" value="${initialTicker}" />
-    <input class="date-input" type="date" value="${initialDate}" />
-    <button class="remove-row" type="button">Remove</button>
+    <input class="ticker-input" type="text" placeholder="Symbol (e.g. NVDA)" value="${initialTicker}" spellcheck="false" />
+    <button class="remove-row" type="button" aria-label="Remove symbol">-</button>
   `;
   row.querySelector(".remove-row").addEventListener("click", () => {
     if (runRows.children.length > 1) {
@@ -22,6 +23,15 @@ function createRunRow(initialTicker = "", initialDate = window.TRADINGAGENTS_DEF
     }
   });
   runRows.appendChild(row);
+}
+
+function setComposerMessage(message = "", isError = false) {
+  composerMessage.textContent = message;
+  composerMessage.style.color = isError ? "var(--danger)" : "var(--muted)";
+}
+
+function isValidTradeDate(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 function statusClass(status) {
@@ -59,25 +69,39 @@ async function fetchJobs() {
 }
 
 async function submitRuns() {
+  const tradeDate = sharedDateInput.value.trim();
+  if (!isValidTradeDate(tradeDate)) {
+    setComposerMessage("Date must use YYYY-MM-DD.", true);
+    return;
+  }
+
   const rows = [...runRows.querySelectorAll(".run-row")];
   const runs = rows
     .map((row) => ({
       ticker: row.querySelector(".ticker-input").value.trim(),
-      trade_date: row.querySelector(".date-input").value,
+      trade_date: tradeDate,
     }))
-    .filter((run) => run.ticker && run.trade_date);
+    .filter((run) => run.ticker);
 
   if (!runs.length) {
+    setComposerMessage("Enter at least one symbol.", true);
     return;
   }
 
   submitRunsButton.disabled = true;
+  setComposerMessage("");
   try {
-    await fetch("/api/jobs", {
+    const response = await fetch("/api/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ runs }),
     });
+    if (!response.ok) {
+      const payload = await response.json();
+      setComposerMessage(payload.detail || "Run submission failed.", true);
+      return;
+    }
+    setComposerMessage(`Queued ${runs.length} symbol${runs.length === 1 ? "" : "s"} for ${tradeDate}.`);
     await fetchJobs();
     await loadTickers();
   } finally {
@@ -90,7 +114,7 @@ async function loadTickers() {
   const payload = await response.json();
   const tickers = payload.tickers || [];
 
-  tickerSelect.innerHTML = `<option value="">Select a ticker</option>`;
+  tickerSelect.innerHTML = `<option value="">Ticker</option>`;
   tickers.forEach((ticker) => {
     const option = document.createElement("option");
     option.value = ticker.ticker;
@@ -117,7 +141,7 @@ async function loadTickers() {
 }
 
 async function loadReportsForTicker(ticker) {
-  reportSelect.innerHTML = `<option value="">Select a report date</option>`;
+  reportSelect.innerHTML = `<option value="">Trade date</option>`;
   reportTitle.textContent = "No report selected";
   reportView.className = "report-view empty-state";
   reportView.textContent = "Select a ticker and report date to render the saved analysis.";
@@ -179,6 +203,7 @@ addRowButton.addEventListener("click", () => createRunRow());
 submitRunsButton.addEventListener("click", submitRuns);
 tickerSelect.addEventListener("change", (event) => loadReportsForTicker(event.target.value));
 reportSelect.addEventListener("change", () => loadReport(tickerSelect.value, reportSelect.value));
+sharedDateInput.addEventListener("input", () => setComposerMessage(""));
 
 createRunRow("SPY");
 createRunRow("NVDA");

@@ -3,62 +3,56 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TradingAgents Control Room</title>
+    <title>TradingAgents</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500;700&family=Cormorant+Garamond:wght@500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
-    <div class="backdrop"></div>
     <main class="shell">
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">TradingAgents / Web Interface</p>
-          <h1>Run coordinated ticker analysis and inspect every saved report from one control room.</h1>
-          <p class="lede">
-            The backend calls `TradingAgentsGraph` directly with the `opencode` client. Change the OpenCode model in
-            <code>opencode.json</code>; the UI keeps using the same provider.
-          </p>
+      <header class="topbar">
+        <div class="topbar-copy">
+          <p class="eyebrow">TradingAgents</p>
+          <h1>Run Analysis</h1>
         </div>
-        <div class="hero-meta">
-          <div class="metric-card">
-            <span class="metric-label">Default date</span>
-            <strong id="default-date">{{ today }}</strong>
-          </div>
-          <div class="metric-card">
-            <span class="metric-label">Execution mode</span>
-            <strong>Parallel jobs</strong>
-          </div>
-          <div class="metric-card">
-            <span class="metric-label">Report source</span>
-            <strong><code>reports/&lt;ticker&gt;/</code></strong>
-          </div>
+        <div class="topbar-meta">
+          <span>Default date</span>
+          <strong id="default-date">{{ today }}</strong>
         </div>
-      </section>
+      </header>
 
       <section class="grid">
         <article class="panel composer">
           <div class="panel-head">
-            <p class="panel-kicker">Batch Runner</p>
-            <h2>Queue multiple tickers</h2>
+            <p class="panel-kicker">Config</p>
+            <h2>Batch run</h2>
           </div>
-          <p class="panel-copy">
-            Add one or more ticker/date pairs. Each submission creates its own graph run and executes in the background.
-          </p>
+          <div class="shared-controls">
+            <label class="field">
+              <span class="field-label">Date</span>
+              <input
+                id="shared-date"
+                class="shared-date-input"
+                type="text"
+                inputmode="numeric"
+                spellcheck="false"
+                placeholder="YYYY-MM-DD"
+                value="{{ today }}"
+              />
+            </label>
+          </div>
           <div id="run-rows" class="run-rows"></div>
           <div class="composer-actions">
-            <button id="add-row" class="ghost-button" type="button">Add Row</button>
-            <button id="submit-runs" class="primary-button" type="button">Launch Analysis</button>
+            <button id="add-row" class="icon-button" type="button" aria-label="Add symbol">Add symbol</button>
+            <button id="submit-runs" class="primary-button" type="button">Run analysis</button>
           </div>
+          <p id="composer-message" class="composer-message" aria-live="polite"></p>
         </article>
 
         <article class="panel jobs">
           <div class="panel-head">
-            <p class="panel-kicker">Live Queue</p>
+            <p class="panel-kicker">Queue</p>
             <h2>Recent jobs</h2>
           </div>
           <div id="jobs-list" class="jobs-list empty-state">No jobs yet.</div>
@@ -68,15 +62,15 @@
       <section class="grid lower-grid">
         <article class="panel browser">
           <div class="panel-head">
-            <p class="panel-kicker">Report Browser</p>
-            <h2>Saved ticker logs</h2>
+            <p class="panel-kicker">Reports</p>
+            <h2>Saved reports</h2>
           </div>
           <div class="browser-toolbar">
             <select id="ticker-select">
-              <option value="">Select a ticker</option>
+              <option value="">Ticker</option>
             </select>
             <select id="report-select">
-              <option value="">Select a report date</option>
+              <option value="">Trade date</option>
             </select>
           </div>
           <div id="ticker-summary" class="ticker-summary empty-state">Choose a ticker to list saved JSON logs.</div>
@@ -84,7 +78,7 @@
 
         <article class="panel report">
           <div class="panel-head">
-            <p class="panel-kicker">Rendered Output</p>
+            <p class="panel-kicker">Rendered</p>
             <h2 id="report-title">No report selected</h2>
           </div>
           <div id="report-view" class="report-view empty-state">Select a ticker and report date to render the saved analysis.</div>
