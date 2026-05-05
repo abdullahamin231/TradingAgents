@@ -78,8 +78,10 @@ def _tool_spec(tool: Any) -> dict[str, Any]:
 def _build_tool_prompt(prompt: str, tools: Iterable[Any]) -> str:
     tool_specs = [_tool_spec(tool) for tool in tools]
     return (
-        "You may either answer directly or request one or more tool calls.\n"
-        "Return only valid JSON. Do not include markdown, code fences, or commentary.\n\n"
+        "You are acting as an LLM with tool-calling support for an external orchestrator.\n"
+        "Preserve the intent, constraints, and content of the original prompt below.\n"
+        "Do not answer in natural-language prose outside the JSON envelope.\n"
+        "Return only valid JSON so the orchestrator can either execute tool calls or accept the final answer.\n\n"
         "Output format:\n"
         "{\n"
         '  "tool_calls": [\n'
@@ -92,8 +94,10 @@ def _build_tool_prompt(prompt: str, tools: Iterable[Any]) -> str:
         "}\n\n"
         "Available tools:\n"
         f"{json.dumps(tool_specs, indent=2, ensure_ascii=True, sort_keys=True)}\n\n"
-        "Conversation:\n"
-        f"{prompt}"
+        "Original prompt to follow:\n"
+        "<<BEGIN_ORIGINAL_PROMPT>>\n"
+        f"{prompt}\n"
+        "<<END_ORIGINAL_PROMPT>>"
     )
 
 
@@ -183,12 +187,16 @@ class OpenCodeClient(BaseLLMClient):
         def _invoke_structured(input: Any, config=None, **kwargs) -> Any:
             prompt = self._normalize_prompt(input)
             structured_prompt = (
+                "You are acting as an LLM with structured-output support for an external orchestrator.\n"
+                "Preserve the intent, constraints, and content of the original prompt below.\n"
                 "Return only valid JSON that matches this schema. "
                 "Do not include markdown, code fences, or commentary.\n\n"
                 "Schema:\n"
                 f"{_schema_json(schema)}\n\n"
-                "Prompt:\n"
-                f"{prompt}"
+                "Original prompt to follow:\n"
+                "<<BEGIN_ORIGINAL_PROMPT>>\n"
+                f"{prompt}\n"
+                "<<END_ORIGINAL_PROMPT>>"
             )
             raw_output = self._run_binary(structured_prompt)
             payload = _extract_first_json_value(raw_output)

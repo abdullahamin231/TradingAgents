@@ -56,6 +56,9 @@ class TestOpenCodeClient:
         result = runnable.invoke("Return a trade decision")
 
         assert result == _OpenCodeResponse(action="buy", confidence=92)
+        opencode_prompt = mock_run.call_args.args[0][-1]
+        assert "Return a trade decision" in opencode_prompt
+        assert '"title": "_OpenCodeResponse"' in opencode_prompt
 
     @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
     def test_with_structured_output_raises_on_parse_failure(self, mock_run):
