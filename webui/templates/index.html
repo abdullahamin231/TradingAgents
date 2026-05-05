@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TradingAgents Control Room</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;500;700&family=Cormorant+Garamond:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="backdrop"></div>
+    <main class="shell">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">TradingAgents / Web Interface</p>
+          <h1>Run coordinated ticker analysis and inspect every saved report from one control room.</h1>
+          <p class="lede">
+            The backend calls `TradingAgentsGraph` directly with the `opencode` client. Change the OpenCode model in
+            <code>opencode.json</code>; the UI keeps using the same provider.
+          </p>
+        </div>
+        <div class="hero-meta">
+          <div class="metric-card">
+            <span class="metric-label">Default date</span>
+            <strong id="default-date">{{ today }}</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Execution mode</span>
+            <strong>Parallel jobs</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Report source</span>
+            <strong><code>reports/&lt;ticker&gt;/</code></strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="panel composer">
+          <div class="panel-head">
+            <p class="panel-kicker">Batch Runner</p>
+            <h2>Queue multiple tickers</h2>
+          </div>
+          <p class="panel-copy">
+            Add one or more ticker/date pairs. Each submission creates its own graph run and executes in the background.
+          </p>
+          <div id="run-rows" class="run-rows"></div>
+          <div class="composer-actions">
+            <button id="add-row" class="ghost-button" type="button">Add Row</button>
+            <button id="submit-runs" class="primary-button" type="button">Launch Analysis</button>
+          </div>
+        </article>
+
+        <article class="panel jobs">
+          <div class="panel-head">
+            <p class="panel-kicker">Live Queue</p>
+            <h2>Recent jobs</h2>
+          </div>
+          <div id="jobs-list" class="jobs-list empty-state">No jobs yet.</div>
+        </article>
+      </section>
+
+      <section class="grid lower-grid">
+        <article class="panel browser">
+          <div class="panel-head">
+            <p class="panel-kicker">Report Browser</p>
+            <h2>Saved ticker logs</h2>
+          </div>
+          <div class="browser-toolbar">
+            <select id="ticker-select">
+              <option value="">Select a ticker</option>
+            </select>
+            <select id="report-select">
+              <option value="">Select a report date</option>
+            </select>
+          </div>
+          <div id="ticker-summary" class="ticker-summary empty-state">Choose a ticker to list saved JSON logs.</div>
+        </article>
+
+        <article class="panel report">
+          <div class="panel-head">
+            <p class="panel-kicker">Rendered Output</p>
+            <h2 id="report-title">No report selected</h2>
+          </div>
+          <div id="report-view" class="report-view empty-state">Select a ticker and report date to render the saved analysis.</div>
+        </article>
+      </section>
+    </main>
+    <script>
+      window.TRADINGAGENTS_DEFAULT_DATE = "{{ today }}";
+    </script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
