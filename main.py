@@ -30,6 +30,7 @@ trade_date = "2026-05-05"
 final_state, decision = ta.propagate(ticker, trade_date)
 
 print(final_state.get("final_trade_decision") or decision or "")
+print("decision: ", decision)
 
 # Memorize mistakes and reflect
 # ta.reflect_and_remember(1000) # parameter is the position returns
