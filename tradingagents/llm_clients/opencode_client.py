@@ -1,5 +1,6 @@
 import json
 import subprocess
+import uuid
 from typing import Any, Iterable, Optional
 
 from langchain_core.messages import AIMessage, BaseMessage
@@ -56,6 +57,78 @@ def _validate_structured_output(schema: type, payload: str) -> Any:
     raise TypeError(f"Unsupported schema type: {schema!r}")
 
 
+def _tool_schema(tool: Any) -> dict[str, Any]:
+    if hasattr(tool, "args_schema") and tool.args_schema is not None:
+        return json.loads(_schema_json(tool.args_schema))
+    if hasattr(tool, "tool_call_schema") and tool.tool_call_schema is not None:
+        return json.loads(_schema_json(tool.tool_call_schema))
+    if hasattr(tool, "args") and isinstance(tool.args, dict):
+        return {"type": "object", "properties": tool.args}
+    return {"type": "object", "properties": {}}
+
+
+def _tool_spec(tool: Any) -> dict[str, Any]:
+    return {
+        "name": getattr(tool, "name", tool.__class__.__name__),
+        "description": getattr(tool, "description", "") or "",
+        "parameters": _tool_schema(tool),
+    }
+
+
+def _build_tool_prompt(prompt: str, tools: Iterable[Any]) -> str:
+    tool_specs = [_tool_spec(tool) for tool in tools]
+    return (
+        "You may either answer directly or request one or more tool calls.\n"
+        "Return only valid JSON. Do not include markdown, code fences, or commentary.\n\n"
+        "Output format:\n"
+        "{\n"
+        '  "tool_calls": [\n'
+        '    {"name": "tool_name", "args": {"param": "value"}}\n'
+        "  ]\n"
+        "}\n"
+        "or\n"
+        '{\n'
+        '  "final_answer": "your response"\n'
+        "}\n\n"
+        "Available tools:\n"
+        f"{json.dumps(tool_specs, indent=2, ensure_ascii=True, sort_keys=True)}\n\n"
+        "Conversation:\n"
+        f"{prompt}"
+    )
+
+
+def _coerce_tool_calls(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+
+    raw_tool_calls = payload.get("tool_calls")
+    if not isinstance(raw_tool_calls, list):
+        return []
+
+    normalized = []
+    for raw_call in raw_tool_calls:
+        if not isinstance(raw_call, dict):
+            continue
+
+        name = raw_call.get("name")
+        args = raw_call.get("args", {})
+        if not isinstance(name, str) or not name.strip():
+            continue
+        if not isinstance(args, dict):
+            continue
+
+        normalized.append(
+            {
+                "name": name,
+                "args": args,
+                "id": raw_call.get("id") or f"call_{uuid.uuid4().hex}",
+                "type": "tool_call",
+            }
+        )
+
+    return normalized
+
+
 class OpenCodeClient(BaseLLMClient):
     """Compatibility wrapper for a local `opencode run` command."""
 
@@ -82,8 +155,27 @@ class OpenCodeClient(BaseLLMClient):
         return AIMessage(content=content)
 
     def bind_tools(self, tools: Iterable[Any]) -> RunnableLambda:
+        tool_list = list(tools)
+
         def _invoke_bound(input: Any, config=None, **kwargs) -> AIMessage:
-            return self.invoke(input, config=config, **kwargs)
+            prompt = self._normalize_prompt(input)
+            tool_prompt = _build_tool_prompt(prompt, tool_list)
+            raw_output = self._run_binary(tool_prompt)
+
+            try:
+                payload = json.loads(_extract_first_json_value(raw_output))
+            except ValueError:
+                return AIMessage(content=raw_output)
+
+            tool_calls = _coerce_tool_calls(payload)
+            if tool_calls:
+                return AIMessage(content="", tool_calls=tool_calls)
+
+            final_answer = payload.get("final_answer")
+            if isinstance(final_answer, str):
+                return AIMessage(content=final_answer)
+
+            return AIMessage(content=raw_output)
 
         return RunnableLambda(_invoke_bound)
 

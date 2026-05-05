@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.tools import tool
 from pydantic import BaseModel
 
 from tradingagents.default_config import DEFAULT_CONFIG
@@ -15,6 +16,12 @@ from tradingagents.llm_clients.factory import create_llm_client
 class _OpenCodeResponse(BaseModel):
     action: str
     confidence: int
+
+
+@tool
+def _sample_tool(ticker: str, days: int = 7) -> str:
+    """Return sample tool output."""
+    return f"{ticker}:{days}"
 
 
 @pytest.mark.unit
@@ -70,7 +77,7 @@ class TestOpenCodeClient:
         mock_run.return_value = subprocess.CompletedProcess(
             args=["binary", "run", "prompt"],
             returncode=0,
-            stdout="plain report",
+            stdout='{"final_answer":"plain report"}',
             stderr="",
         )
 
@@ -82,7 +89,7 @@ class TestOpenCodeClient:
             ]
         )
 
-        chain = prompt | client.bind_tools([])
+        chain = prompt | client.bind_tools([_sample_tool])
         result = chain.invoke({"topic": "NVDA"})
 
         assert isinstance(result, AIMessage)
@@ -91,6 +98,44 @@ class TestOpenCodeClient:
         assert "SYSTEM:" in opencode_prompt
         assert "HUMAN:" in opencode_prompt
         assert "NVDA" in opencode_prompt
+        assert '"name": "_sample_tool"' in opencode_prompt
+        assert '"final_answer"' in opencode_prompt
+
+    @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
+    def test_bind_tools_returns_tool_calls(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["binary", "run", "prompt"],
+            returncode=0,
+            stdout='{"tool_calls":[{"name":"_sample_tool","args":{"ticker":"AAPL","days":5}}]}',
+            stderr="",
+        )
+
+        client = OpenCodeClient("any-model")
+        result = client.bind_tools([_sample_tool]).invoke("Analyze AAPL")
+
+        assert isinstance(result, AIMessage)
+        assert result.content == ""
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0]["name"] == "_sample_tool"
+        assert result.tool_calls[0]["args"] == {"ticker": "AAPL", "days": 5}
+        assert result.tool_calls[0]["type"] == "tool_call"
+        assert result.tool_calls[0]["id"].startswith("call_")
+
+    @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
+    def test_bind_tools_falls_back_to_plain_text_when_json_missing(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["binary", "run", "prompt"],
+            returncode=0,
+            stdout="plain report without json",
+            stderr="",
+        )
+
+        client = OpenCodeClient("any-model")
+        result = client.bind_tools([_sample_tool]).invoke("Analyze AAPL")
+
+        assert isinstance(result, AIMessage)
+        assert result.content == "plain report without json"
+        assert result.tool_calls == []
 
     @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
     def test_invoke_serializes_message_lists(self, mock_run):

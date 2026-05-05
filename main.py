@@ -1,20 +1,7 @@
-import logging
-
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 
 from dotenv import load_dotenv
-
-
-def _print_section(title: str, content: str) -> None:
-    print(f"\n{'=' * 24} {title} {'=' * 24}")
-    print(content or "[empty]")
-
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -35,32 +22,14 @@ config["data_vendors"] = {
 }
 
 # Initialize with custom config
-ta = TradingAgentsGraph(debug=True, config=config)
+ta = TradingAgentsGraph(debug=False, config=config)
 
-ticker = "NVDA"
+ticker = "SPY"
 trade_date = "2026-05-05"
-
-logging.info(
-    "Starting analysis for %s on %s with provider=%s",
-    ticker,
-    trade_date,
-    config["llm_provider"],
-)
-logging.info(
-    "Debug streaming is enabled; intermediate agent outputs will be printed during the run."
-)
 
 final_state, decision = ta.propagate(ticker, trade_date)
 
-logging.info("Run finished with final decision: %s", decision)
-
-_print_section("Market Report", final_state.get("market_report", ""))
-_print_section("Sentiment Report", final_state.get("sentiment_report", ""))
-_print_section("News Report", final_state.get("news_report", ""))
-_print_section("Fundamentals Report", final_state.get("fundamentals_report", ""))
-_print_section("Investment Plan", final_state.get("investment_plan", ""))
-_print_section("Trader Plan", final_state.get("trader_investment_plan", ""))
-_print_section("Final Trade Decision", final_state.get("final_trade_decision", ""))
+print(final_state.get("final_trade_decision") or decision or "")
 
 # Memorize mistakes and reflect
 # ta.reflect_and_remember(1000) # parameter is the position returns
