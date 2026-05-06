@@ -7,8 +7,16 @@ const reportSelect = document.querySelector("#report-select");
 const tickerSummary = document.querySelector("#ticker-summary");
 const reportTitle = document.querySelector("#report-title");
 const reportView = document.querySelector("#report-view");
+const providerSelect = document.querySelector("#provider-select");
+const modelInput = document.querySelector("#model-input");
+const opencodeModelField = document.querySelector("#opencode-model-field");
+const providerModelFields = document.querySelector("#provider-model-fields");
+const quickModelInput = document.querySelector("#quick-model-input");
+const deepModelInput = document.querySelector("#deep-model-input");
 const sharedDateInput = document.querySelector("#shared-date");
 const composerMessage = document.querySelector("#composer-message");
+
+let providerOptions = [];
 
 function createRunRow(initialTicker = "") {
   const row = document.createElement("div");
@@ -38,6 +46,45 @@ function statusClass(status) {
   return `status-pill status-${status || "queued"}`;
 }
 
+function updateModelDefault(providerValue) {
+  const provider = providerOptions.find((item) => item.value === providerValue);
+  if (!provider) {
+    return;
+  }
+
+  const isOpenCode = providerValue === "opencode";
+  opencodeModelField.classList.toggle("hidden", !isOpenCode);
+  providerModelFields.classList.toggle("hidden", isOpenCode);
+
+  if (isOpenCode) {
+    modelInput.value = provider.default_deep_model || provider.default_quick_model || "";
+    modelInput.placeholder = provider.note || "Model name or deployment";
+    return;
+  }
+
+  quickModelInput.value = provider.default_quick_model || "";
+  deepModelInput.value = provider.default_deep_model || "";
+  quickModelInput.placeholder = provider.note || "Quick think model";
+  deepModelInput.placeholder = provider.note || "Deep think model";
+}
+
+function renderProviders() {
+  if (!providerOptions.length) {
+    return;
+  }
+
+  providerSelect.innerHTML = providerOptions
+    .map(
+      (provider) => `
+        <option value="${provider.value}">${provider.label}</option>
+      `
+    )
+    .join("");
+
+  providerSelect.value = providerOptions[0].value;
+  updateModelDefault(providerSelect.value);
+}
+
 function renderJobs(jobs) {
   if (!jobs.length) {
     jobsList.className = "jobs-list empty-state";
@@ -54,12 +101,33 @@ function renderJobs(jobs) {
             <strong>${job.ticker} / ${job.trade_date}</strong>
             <span class="${statusClass(job.status)}">${job.status}</span>
           </div>
-          <p class="job-meta">Job ${job.job_id.slice(0, 8)} · OpenCode model: ${job.opencode_model || "from opencode.json"}</p>
+          <p class="job-meta">Job ${job.job_id.slice(0, 8)} · Provider: ${job.provider || "opencode"}</p>
+          ${
+            job.provider === "opencode"
+              ? `<p class="job-meta">Model: ${job.deep_model || job.quick_model || "default"}</p>`
+              : `<p class="job-meta">Quick: ${job.quick_model || "default"} · Deep: ${job.deep_model || "default"}</p>`
+          }
           <p>${job.decision || job.error || "Waiting for completion..."}</p>
         </article>
       `
     )
     .join("");
+}
+
+async function loadProviders() {
+  try {
+    const response = await fetch("/api/providers");
+    const payload = await response.json();
+    providerOptions = payload.providers || [];
+    renderProviders();
+  } catch (error) {
+    providerOptions = [];
+    providerSelect.innerHTML = `<option value="opencode">OpenCode</option>`;
+    providerSelect.value = "opencode";
+    opencodeModelField.classList.remove("hidden");
+    providerModelFields.classList.add("hidden");
+    modelInput.placeholder = "Model name or deployment";
+  }
 }
 
 async function fetchJobs() {
@@ -80,6 +148,10 @@ async function submitRuns() {
     .map((row) => ({
       ticker: row.querySelector(".ticker-input").value.trim(),
       trade_date: tradeDate,
+      provider: providerSelect.value,
+      model: providerSelect.value === "opencode" ? modelInput.value.trim() : null,
+      quick_model: providerSelect.value === "opencode" ? null : quickModelInput.value.trim(),
+      deep_model: providerSelect.value === "opencode" ? null : deepModelInput.value.trim(),
     }))
     .filter((run) => run.ticker);
 
@@ -101,7 +173,10 @@ async function submitRuns() {
       setComposerMessage(payload.detail || "Run submission failed.", true);
       return;
     }
-    setComposerMessage(`Queued ${runs.length} symbol${runs.length === 1 ? "" : "s"} for ${tradeDate}.`);
+    const providerLabel = providerSelect.options[providerSelect.selectedIndex]?.textContent || providerSelect.value;
+    setComposerMessage(
+      `Queued ${runs.length} symbol${runs.length === 1 ? "" : "s"} for ${tradeDate} with ${providerLabel}.`
+    );
     await fetchJobs();
     await loadTickers();
   } finally {
@@ -204,9 +279,11 @@ submitRunsButton.addEventListener("click", submitRuns);
 tickerSelect.addEventListener("change", (event) => loadReportsForTicker(event.target.value));
 reportSelect.addEventListener("change", () => loadReport(tickerSelect.value, reportSelect.value));
 sharedDateInput.addEventListener("input", () => setComposerMessage(""));
+providerSelect.addEventListener("change", (event) => updateModelDefault(event.target.value));
 
 createRunRow("SPY");
 createRunRow("NVDA");
+loadProviders();
 fetchJobs();
 loadTickers();
 setInterval(fetchJobs, 5000);

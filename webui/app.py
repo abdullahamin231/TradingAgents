@@ -10,7 +10,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
-from .service import TradingJobManager, list_report_tickers, list_report_runs, load_report
+from .service import (
+    TradingJobManager,
+    list_llm_providers,
+    list_report_tickers,
+    list_report_runs,
+    load_report,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -23,6 +29,10 @@ job_manager = TradingJobManager(max_workers=int(os.getenv("TRADINGAGENTS_WEB_MAX
 class RunRequest(BaseModel):
     ticker: str = Field(min_length=1, max_length=32)
     trade_date: str
+    provider: str = Field(default="opencode", min_length=1, max_length=32)
+    model: str | None = Field(default=None, max_length=128)
+    quick_model: str | None = Field(default=None, max_length=128)
+    deep_model: str | None = Field(default=None, max_length=128)
 
 
 class BatchRunRequest(BaseModel):
@@ -45,6 +55,11 @@ def get_jobs() -> dict:
     return {"jobs": job_manager.list_jobs()}
 
 
+@app.get("/api/providers")
+def get_providers() -> dict:
+    return {"providers": list_llm_providers()}
+
+
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str) -> dict:
     job = job_manager.get_job(job_id)
@@ -56,7 +71,16 @@ def get_job(job_id: str) -> dict:
 @app.post("/api/jobs")
 def create_jobs(payload: BatchRunRequest) -> dict:
     try:
-        jobs = [job_manager.submit(run.ticker, run.trade_date) for run in payload.runs]
+        jobs = [
+            job_manager.submit(
+                run.ticker,
+                run.trade_date,
+                run.provider,
+                run.quick_model or run.model,
+                run.deep_model or run.model,
+            )
+            for run in payload.runs
+        ]
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"jobs": [job_manager.get_job(job.job_id) for job in jobs]}

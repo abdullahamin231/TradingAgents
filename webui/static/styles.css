@@ -189,8 +189,23 @@ button {
 
 .shared-controls {
   display: grid;
-  grid-template-columns: minmax(180px, 240px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.provider-model-fields.hidden {
+  display: none;
+}
+
+.provider-model-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  grid-column: 1 / -1;
 }
 
 .field {
@@ -352,6 +367,8 @@ button {
   .topbar,
   .grid,
   .lower-grid,
+  .shared-controls,
+  .provider-model-fields,
   .run-row,
   .browser-toolbar {
     grid-template-columns: 1fr;

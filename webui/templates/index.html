@@ -30,6 +30,45 @@
           </div>
           <div class="shared-controls">
             <label class="field">
+              <span class="field-label">Provider</span>
+              <select id="provider-select">
+                <option value="opencode">OpenCode</option>
+              </select>
+            </label>
+            <label class="field" id="opencode-model-field">
+              <span class="field-label">Model / deployment</span>
+              <input
+                id="model-input"
+                class="shared-model-input"
+                type="text"
+                spellcheck="false"
+                placeholder="Model name or deployment"
+                value=""
+              />
+            </label>
+            <div id="provider-model-fields" class="provider-model-fields hidden">
+              <label class="field">
+                <span class="field-label">Quick think model</span>
+                <input
+                  id="quick-model-input"
+                  type="text"
+                  spellcheck="false"
+                  placeholder="Quick think model"
+                  value=""
+                />
+              </label>
+              <label class="field">
+                <span class="field-label">Deep think model</span>
+                <input
+                  id="deep-model-input"
+                  type="text"
+                  spellcheck="false"
+                  placeholder="Deep think model"
+                  value=""
+                />
+              </label>
+            </div>
+            <label class="field">
               <span class="field-label">Date</span>
               <input
                 id="shared-date"

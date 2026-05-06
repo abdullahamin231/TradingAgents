@@ -22,6 +22,32 @@ def test_build_opencode_config_uses_opencode_json(tmp_path, monkeypatch):
     assert Path(config["results_dir"]) == tmp_path / "reports"
 
 
+def test_build_run_config_supports_google_provider(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "REPORTS_DIR", tmp_path / "reports")
+
+    config = service.build_run_config(
+        "google",
+        "gemini-3.1-flash-preview",
+        "gemini-3.1-pro-preview",
+    )
+
+    assert config["llm_provider"] == "google"
+    assert config["quick_think_llm"] == "gemini-3.1-flash-preview"
+    assert config["deep_think_llm"] == "gemini-3.1-pro-preview"
+    assert config["backend_url"] is None
+
+
+def test_list_llm_providers_includes_opencode_and_google():
+    providers = service.list_llm_providers()
+    values = {provider["value"] for provider in providers}
+
+    assert "opencode" in values
+    assert "google" in values
+    google = next(provider for provider in providers if provider["value"] == "google")
+    assert "default_quick_model" in google
+    assert "default_deep_model" in google
+
+
 def test_list_and_load_report(tmp_path, monkeypatch):
     reports_dir = tmp_path / "reports"
     log_dir = reports_dir / "SPY" / "TradingAgentsStrategy_logs"

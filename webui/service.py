@@ -17,6 +17,8 @@ from dotenv import load_dotenv
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.dataflows.utils import safe_ticker_component
+from tradingagents.llm_clients.model_catalog import get_model_options
+from tradingagents.llm_clients.provider_urls import get_ollama_base_url
 
 try:
     import markdown
@@ -31,6 +33,32 @@ load_dotenv(".env.enterprise", override=False)
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REPORTS_DIR = REPO_ROOT / "reports"
 OPENCODE_CONFIG_PATH = REPO_ROOT / "opencode.json"
+PROVIDER_OPTIONS = [
+    {"label": "OpenCode", "value": "opencode"},
+    {"label": "OpenAI", "value": "openai"},
+    {"label": "Gemini", "value": "google"},
+    {"label": "Anthropic", "value": "anthropic"},
+    {"label": "xAI", "value": "xai"},
+    {"label": "DeepSeek", "value": "deepseek"},
+    {"label": "Qwen", "value": "qwen"},
+    {"label": "GLM", "value": "glm"},
+    {"label": "OpenRouter", "value": "openrouter"},
+    {"label": "Azure OpenAI", "value": "azure"},
+    {"label": "Ollama", "value": "ollama"},
+]
+
+_PROVIDER_DEFAULT_MODELS = {
+    "openai": lambda mode: get_model_options("openai", mode)[0][1],
+    "google": lambda mode: get_model_options("google", mode)[0][1],
+    "anthropic": lambda mode: get_model_options("anthropic", mode)[0][1],
+    "xai": lambda mode: get_model_options("xai", mode)[0][1],
+    "deepseek": lambda mode: get_model_options("deepseek", mode)[0][1],
+    "qwen": lambda mode: get_model_options("qwen", mode)[0][1],
+    "glm": lambda mode: get_model_options("glm", mode)[0][1],
+    "openrouter": lambda mode: DEFAULT_CONFIG["deep_think_llm"],
+    "azure": lambda mode: DEFAULT_CONFIG["deep_think_llm"],
+    "ollama": lambda mode: "llama3.1",
+}
 _SECTION_TITLES = {
     "market_report": "Market Analysis",
     "sentiment_report": "Social Sentiment",
@@ -64,17 +92,53 @@ def _load_opencode_model() -> str | None:
     return model if isinstance(model, str) and model.strip() else None
 
 
-def build_opencode_config() -> dict[str, Any]:
-    config = copy.deepcopy(DEFAULT_CONFIG)
-    opencode_model = _load_opencode_model() or "opencode"
+def get_provider_default_model(provider: str, mode: str = "deep") -> str:
+    provider_lower = provider.lower()
+    if provider_lower == "opencode":
+        return _load_opencode_model() or "opencode"
 
-    config["llm_provider"] = "opencode"
-    config["deep_think_llm"] = opencode_model
-    config["quick_think_llm"] = opencode_model
+    default_model_factory = _PROVIDER_DEFAULT_MODELS.get(provider_lower)
+    if default_model_factory is not None:
+        return default_model_factory(mode)
+
+    return DEFAULT_CONFIG["deep_think_llm"]
+
+
+def build_run_config(
+    provider: str,
+    quick_model: str | None = None,
+    deep_model: str | None = None,
+) -> dict[str, Any]:
+    config = copy.deepcopy(DEFAULT_CONFIG)
+    provider_lower = provider.lower()
+    resolved_quick_model = (
+        quick_model.strip()
+        if isinstance(quick_model, str) and quick_model.strip()
+        else get_provider_default_model(provider_lower, "quick")
+    )
+    resolved_deep_model = (
+        deep_model.strip()
+        if isinstance(deep_model, str) and deep_model.strip()
+        else get_provider_default_model(provider_lower, "deep")
+    )
+
+    if provider_lower == "opencode":
+        resolved_quick_model = resolved_deep_model = (
+            deep_model.strip()
+            if isinstance(deep_model, str) and deep_model.strip()
+            else quick_model.strip()
+            if isinstance(quick_model, str) and quick_model.strip()
+            else get_provider_default_model(provider_lower, "deep")
+        )
+
+    config["llm_provider"] = provider_lower
+    config["deep_think_llm"] = resolved_deep_model
+    config["quick_think_llm"] = resolved_quick_model
     config["results_dir"] = str(REPORTS_DIR)
     config["data_cache_dir"] = str(REPORTS_DIR / "cache")
     config["memory_log_path"] = str(REPORTS_DIR / "memory" / "trading_memory.md")
     config["max_debate_rounds"] = 1
+    config["backend_url"] = get_ollama_base_url() if provider_lower == "ollama" else None
     config["data_vendors"] = {
         "core_stock_apis": "yfinance",
         "technical_indicators": "yfinance",
@@ -84,11 +148,38 @@ def build_opencode_config() -> dict[str, Any]:
     return config
 
 
+def build_opencode_config() -> dict[str, Any]:
+    return build_run_config("opencode")
+
+
+def list_llm_providers() -> list[dict[str, Any]]:
+    providers = []
+    for option in PROVIDER_OPTIONS:
+        provider = option["value"]
+        providers.append(
+            {
+                "label": option["label"],
+                "value": provider,
+                "default_quick_model": get_provider_default_model(provider, "quick"),
+                "default_deep_model": get_provider_default_model(provider, "deep"),
+                "note": (
+                    "Azure, OpenRouter, and Ollama may require a custom deployment/model name."
+                    if provider in {"azure", "openrouter", "ollama"}
+                    else ""
+                ),
+            }
+        )
+    return providers
+
+
 @dataclass
 class JobState:
     job_id: str
     ticker: str
     trade_date: str
+    provider: str = "opencode"
+    quick_model: str | None = None
+    deep_model: str | None = None
     status: str = "queued"
     decision: str | None = None
     report_path: str | None = None
@@ -96,7 +187,6 @@ class JobState:
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     started_at: str | None = None
     completed_at: str | None = None
-    opencode_model: str | None = None
 
 
 class TradingJobManager:
@@ -107,13 +197,42 @@ class TradingJobManager:
         self._lock = threading.Lock()
         self._max_history = max_history
 
-    def submit(self, ticker: str, trade_date: str) -> JobState:
+    def submit(
+        self,
+        ticker: str,
+        trade_date: str,
+        provider: str = "opencode",
+        quick_model: str | None = None,
+        deep_model: str | None = None,
+    ) -> JobState:
         safe_ticker = safe_ticker_component(ticker.strip().upper())
+        provider_lower = provider.strip().lower()
+        resolved_quick_model = (
+            quick_model.strip()
+            if isinstance(quick_model, str) and quick_model.strip()
+            else get_provider_default_model(provider_lower, "quick")
+        )
+        resolved_deep_model = (
+            deep_model.strip()
+            if isinstance(deep_model, str) and deep_model.strip()
+            else get_provider_default_model(provider_lower, "deep")
+        )
+
+        if provider_lower == "opencode":
+            resolved_quick_model = resolved_deep_model = (
+                deep_model.strip()
+                if isinstance(deep_model, str) and deep_model.strip()
+                else quick_model.strip()
+                if isinstance(quick_model, str) and quick_model.strip()
+                else get_provider_default_model(provider_lower, "deep")
+            )
         job = JobState(
             job_id=uuid.uuid4().hex,
             ticker=safe_ticker,
             trade_date=trade_date,
-            opencode_model=_load_opencode_model(),
+            provider=provider_lower,
+            quick_model=resolved_quick_model,
+            deep_model=resolved_deep_model,
         )
         with self._lock:
             self._jobs[job.job_id] = job
@@ -147,7 +266,7 @@ class TradingJobManager:
             job.started_at = datetime.utcnow().isoformat() + "Z"
 
         try:
-            config = build_opencode_config()
+            config = build_run_config(job.provider, job.quick_model, job.deep_model)
             graph = TradingAgentsGraph(debug=False, config=config)
             _, decision = graph.propagate(job.ticker, job.trade_date)
 
