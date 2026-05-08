@@ -91,3 +91,65 @@ def test_list_and_load_report(tmp_path, monkeypatch):
     assert any(section["title"] == "Market Analysis" for section in loaded["sections"])
     assert any(section["html"] for section in loaded["sections"])
     assert any(section["title"] == "Portfolio Manager" for section in loaded["debates"])
+
+
+def test_run_job_saves_complete_report(tmp_path, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
+
+    class FakeGraph:
+        def __init__(self, debug, config):
+            self.debug = debug
+            self.config = config
+
+        def propagate(self, ticker, trade_date):
+            return {
+                "company_of_interest": ticker,
+                "trade_date": trade_date,
+                "market_report": "# Market\n\nDetails",
+                "sentiment_report": "",
+                "news_report": "# News\n\nMacro context",
+                "fundamentals_report": "",
+                "investment_debate_state": {
+                    "bull_history": "Bull case",
+                    "bear_history": "",
+                    "history": "",
+                    "current_response": "",
+                    "judge_decision": "Research manager view",
+                },
+                "trader_investment_plan": "Trader plan",
+                "risk_debate_state": {
+                    "aggressive_history": "Aggressive stance",
+                    "conservative_history": "",
+                    "neutral_history": "",
+                    "history": "",
+                    "judge_decision": "Portfolio manager view",
+                },
+                "investment_plan": "Research plan",
+                "final_trade_decision": "Final decision",
+            }, "BUY"
+
+    monkeypatch.setattr(service, "TradingAgentsGraph", FakeGraph)
+
+    manager = service.TradingJobManager(max_workers=1)
+    job = service.JobState(
+        job_id="job12345",
+        ticker="SPY",
+        trade_date="2026-05-05",
+        provider="opencode",
+        quick_model="opencode",
+        deep_model="opencode",
+    )
+    manager._jobs[job.job_id] = job
+    manager._order.insert(0, job.job_id)
+
+    manager._run_job(job.job_id)
+
+    saved_report = tmp_path / job.report_path
+    assert job.status == "completed"
+    assert job.decision == "BUY"
+    assert saved_report.name == "complete_report.md"
+    assert saved_report.exists()
+    assert (saved_report.parent / "1_analysts" / "market.md").exists()
+    assert (saved_report.parent / "3_trading" / "trader.md").exists()

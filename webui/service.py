@@ -19,6 +19,7 @@ from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.dataflows.utils import safe_ticker_component
 from tradingagents.llm_clients.model_catalog import get_model_options
 from tradingagents.llm_clients.provider_urls import get_ollama_base_url
+from tradingagents.reporting import save_complete_report
 
 try:
     import markdown
@@ -268,19 +269,20 @@ class TradingJobManager:
         try:
             config = build_run_config(job.provider, job.quick_model, job.deep_model)
             graph = TradingAgentsGraph(debug=False, config=config)
-            _, decision = graph.propagate(job.ticker, job.trade_date)
+            final_state, decision = graph.propagate(job.ticker, job.trade_date)
 
-            report_path = (
+            export_dir = (
                 REPORTS_DIR
                 / job.ticker
-                / "TradingAgentsStrategy_logs"
-                / f"full_states_log_{job.trade_date}.json"
+                / "SavedReports"
+                / f"{job.trade_date}_{job.job_id[:8]}"
             )
+            complete_report_path = save_complete_report(final_state, job.ticker, export_dir)
 
             with self._lock:
                 job.status = "completed"
                 job.decision = decision
-                job.report_path = str(report_path.relative_to(REPO_ROOT))
+                job.report_path = str(complete_report_path.relative_to(REPO_ROOT))
                 job.completed_at = datetime.utcnow().isoformat() + "Z"
         except Exception as exc:  # pragma: no cover - surfaced to API
             with self._lock:

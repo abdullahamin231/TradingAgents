@@ -107,6 +107,7 @@ function renderJobs(jobs) {
               ? `<p class="job-meta">Model: ${job.deep_model || job.quick_model || "default"}</p>`
               : `<p class="job-meta">Quick: ${job.quick_model || "default"} · Deep: ${job.deep_model || "default"}</p>`
           }
+          ${job.report_path ? `<p class="job-meta">Full report: ${job.report_path}</p>` : ""}
           <p>${job.decision || job.error || "Waiting for completion..."}</p>
         </article>
       `
