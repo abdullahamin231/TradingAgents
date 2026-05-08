@@ -102,10 +102,17 @@ def _price_api_response_to_dataframe(payload: PriceApiResponse) -> Optional[pd.D
 def fetch_price_api_ohlcv(symbol: str) -> Optional[pd.DataFrame]:
     base_url = os.getenv("BACKTESTKING_PRICE_API_URL")
     if not base_url:
+        logger.info("Price API disabled for %s: BACKTESTKING_PRICE_API_URL is not set", symbol)
         return None
 
     headers = build_price_hmac_headers()
     request_headers = headers if headers else None
+
+    logger.info(
+        "Fetching price data for %s from primary endpoint %s",
+        symbol.upper(),
+        base_url,
+    )
 
     try:
         response = requests.get(
@@ -117,7 +124,7 @@ def fetch_price_api_ohlcv(symbol: str) -> Optional[pd.DataFrame]:
         response.raise_for_status()
         payload = response.json()
     except (RequestException, ValueError, TypeError) as exc:
-        logger.warning("Price API request failed for %s: %s", symbol, exc)
+        logger.warning("Price API request failed for %s, falling back to yfinance: %s", symbol, exc)
         return None
 
     if not isinstance(payload, dict):
@@ -125,8 +132,10 @@ def fetch_price_api_ohlcv(symbol: str) -> Optional[pd.DataFrame]:
 
     data = _price_api_response_to_dataframe(payload)
     if data is None or data.empty:
+        logger.warning("Price API returned no usable rows for %s, falling back to yfinance", symbol)
         return None
 
+    logger.info("Price API returned %d rows for %s", len(data), symbol.upper())
     return data
 
 
@@ -162,6 +171,12 @@ def load_ohlcv(symbol: str, curr_date: str, indicator: Optional[str] = None) -> 
     curr_date_dt = pd.to_datetime(curr_date)
 
     source = "yfinance" if indicator_requires_volume(indicator) else "price_api"
+    logger.info(
+        "Loading OHLCV for %s with indicator=%s using %s",
+        symbol.upper(),
+        indicator or "none",
+        source,
+    )
 
     # Cache uses a fixed window (15y to today) so one file per symbol/source.
     today_date = pd.Timestamp.today()
@@ -176,9 +191,11 @@ def load_ohlcv(symbol: str, curr_date: str, indicator: Optional[str] = None) -> 
     )
 
     if os.path.exists(data_file):
+        logger.info("Using cached %s data for %s from %s", source, symbol.upper(), data_file)
         data = pd.read_csv(data_file, on_bad_lines="skip", encoding="utf-8")
     else:
         if source == "yfinance":
+            logger.info("Fetching volume-capable data for %s from yfinance", symbol.upper())
             data = yf_retry(lambda: yf.download(
                 symbol,
                 start=start_str,
@@ -191,6 +208,7 @@ def load_ohlcv(symbol: str, curr_date: str, indicator: Optional[str] = None) -> 
         else:
             data = fetch_price_api_ohlcv(symbol)
             if data is None:
+                logger.info("Falling back to yfinance for %s after price API miss", symbol.upper())
                 data = yf_retry(lambda: yf.download(
                     symbol,
                     start=start_str,
@@ -201,6 +219,7 @@ def load_ohlcv(symbol: str, curr_date: str, indicator: Optional[str] = None) -> 
                 ))
                 data = data.reset_index()
         data.to_csv(data_file, index=False, encoding="utf-8")
+        logger.info("Cached %s data for %s at %s", source, symbol.upper(), data_file)
 
     data = _clean_dataframe(data)
 

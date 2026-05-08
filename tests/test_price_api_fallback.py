@@ -157,3 +157,48 @@ def test_volume_indicators_use_yfinance_and_separate_cache(tmp_path, monkeypatch
     cache_files = sorted(p.name for p in tmp_path.glob("*.csv"))
     assert any("-price_api-data-" in name for name in cache_files)
     assert any("-yfinance-data-" in name for name in cache_files)
+
+
+def test_source_logging_mentions_primary_and_volume_paths(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(
+        stockstats_utils,
+        "get_config",
+        lambda: {"data_cache_dir": str(tmp_path)},
+    )
+    monkeypatch.setenv("BACKTESTKING_PRICE_API_URL", "https://example.test/prices")
+
+    response = MagicMock()
+    response.raise_for_status.return_value = None
+    response.json.return_value = _price_api_payload()
+    monkeypatch.setattr(
+        stockstats_utils,
+        "requests",
+        MagicMock(get=MagicMock(return_value=response)),
+    )
+
+    yfinance_frame = pd.DataFrame(
+        {
+            "Open": [10.0, 11.0],
+            "High": [10.5, 11.5],
+            "Low": [9.5, 10.5],
+            "Close": [10.2, 11.2],
+            "Volume": [100, 200],
+        },
+        index=pd.to_datetime(["2024-01-02", "2024-01-03"]),
+    )
+    yfinance_frame.index.name = "Date"
+    monkeypatch.setattr(
+        "tradingagents.dataflows.stockstats_utils.yf.download",
+        MagicMock(return_value=yfinance_frame),
+    )
+
+    caplog.set_level("INFO")
+
+    stockstats_utils.load_ohlcv("AAPL", "2024-01-03")
+    stockstats_utils.load_ohlcv("AAPL", "2024-01-03", indicator="mfi")
+
+    messages = "\n".join(record.message for record in caplog.records)
+    assert "using price_api" in messages
+    assert "Fetching price data for AAPL from primary endpoint" in messages
+    assert "using yfinance" in messages
+    assert "Fetching volume-capable data for AAPL from yfinance" in messages
