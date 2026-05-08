@@ -1,16 +1,33 @@
-import time
+import hashlib
+import hmac
 import logging
+import os
+import time
+from typing import Annotated, Optional, TypedDict
 
 import pandas as pd
+import requests
+from requests import RequestException
 import yfinance as yf
 from yfinance.exceptions import YFRateLimitError
 from stockstats import wrap
-from typing import Annotated
-import os
+
 from .config import get_config
 from .utils import safe_ticker_component
 
 logger = logging.getLogger(__name__)
+
+VOLUME_INDICATORS = {"vwma", "mfi"}
+
+
+class PriceApiResponse(TypedDict, total=False):
+    ticker: str
+    source: str
+    dates: list[str]
+    opens: list[float]
+    closes: list[float]
+    highs: list[float]
+    lows: list[float]
 
 
 def yf_retry(func, max_retries=3, base_delay=2.0):
@@ -32,6 +49,91 @@ def yf_retry(func, max_retries=3, base_delay=2.0):
                 raise
 
 
+def build_price_hmac_headers() -> Optional[dict[str, str]]:
+    secret = os.getenv("BACKTESTKING_HMAC_SECRET")
+    if not secret:
+        return None
+
+    timestamp = str(int(time.time()))
+    hmac_digest = hmac.new(
+        secret.encode("utf-8"),
+        f"{timestamp}.".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return {
+        "X-Backtest-Timestamp": timestamp,
+        "X-Backtest-Signature": hmac_digest,
+    }
+
+
+def _price_api_response_to_dataframe(payload: PriceApiResponse) -> Optional[pd.DataFrame]:
+    dates = payload.get("dates") or []
+    opens = payload.get("opens") or []
+    closes = payload.get("closes") or []
+    highs = payload.get("highs") or []
+    lows = payload.get("lows") or []
+
+    if not dates:
+        return None
+
+    lengths = {len(dates), len(opens), len(closes), len(highs), len(lows)}
+    if len(lengths) != 1:
+        return None
+
+    data = pd.DataFrame(
+        {
+            "Date": pd.to_datetime(dates, errors="coerce"),
+            "Open": pd.to_numeric(opens, errors="coerce"),
+            "High": pd.to_numeric(highs, errors="coerce"),
+            "Low": pd.to_numeric(lows, errors="coerce"),
+            "Close": pd.to_numeric(closes, errors="coerce"),
+        }
+    )
+    data = data.dropna(subset=["Date", "Open", "High", "Low", "Close"])
+    if data.empty:
+        return None
+
+    # The fallback yfinance path carries volume, so keep a compatible column
+    # for downstream code that expects OHLCV-shaped data.
+    data["Volume"] = 0
+    return data
+
+
+def fetch_price_api_ohlcv(symbol: str) -> Optional[pd.DataFrame]:
+    base_url = os.getenv("BACKTESTKING_PRICE_API_URL")
+    if not base_url:
+        return None
+
+    headers = build_price_hmac_headers()
+    request_headers = headers if headers else None
+
+    try:
+        response = requests.get(
+            base_url,
+            params={"ticker": symbol.upper()},
+            headers=request_headers,
+            timeout=20,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except (RequestException, ValueError, TypeError) as exc:
+        logger.warning("Price API request failed for %s: %s", symbol, exc)
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    data = _price_api_response_to_dataframe(payload)
+    if data is None or data.empty:
+        return None
+
+    return data
+
+
+def indicator_requires_volume(indicator: Optional[str]) -> bool:
+    return bool(indicator and indicator in VOLUME_INDICATORS)
+
+
 def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     """Normalize a stock DataFrame for stockstats: parse dates, drop invalid rows, fill price gaps."""
     data["Date"] = pd.to_datetime(data["Date"], errors="coerce")
@@ -45,7 +147,7 @@ def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
+def load_ohlcv(symbol: str, curr_date: str, indicator: Optional[str] = None) -> pd.DataFrame:
     """Fetch OHLCV data with caching, filtered to prevent look-ahead bias.
 
     Downloads 15 years of data up to today and caches per symbol. On
@@ -59,7 +161,9 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     config = get_config()
     curr_date_dt = pd.to_datetime(curr_date)
 
-    # Cache uses a fixed window (15y to today) so one file per symbol
+    source = "yfinance" if indicator_requires_volume(indicator) else "price_api"
+
+    # Cache uses a fixed window (15y to today) so one file per symbol/source.
     today_date = pd.Timestamp.today()
     start_date = today_date - pd.DateOffset(years=5)
     start_str = start_date.strftime("%Y-%m-%d")
@@ -68,21 +172,34 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     os.makedirs(config["data_cache_dir"], exist_ok=True)
     data_file = os.path.join(
         config["data_cache_dir"],
-        f"{safe_symbol}-YFin-data-{start_str}-{end_str}.csv",
+        f"{safe_symbol}-{source}-data-{start_str}-{end_str}.csv",
     )
 
     if os.path.exists(data_file):
         data = pd.read_csv(data_file, on_bad_lines="skip", encoding="utf-8")
     else:
-        data = yf_retry(lambda: yf.download(
-            symbol,
-            start=start_str,
-            end=end_str,
-            multi_level_index=False,
-            progress=False,
-            auto_adjust=True,
-        ))
-        data = data.reset_index()
+        if source == "yfinance":
+            data = yf_retry(lambda: yf.download(
+                symbol,
+                start=start_str,
+                end=end_str,
+                multi_level_index=False,
+                progress=False,
+                auto_adjust=True,
+            ))
+            data = data.reset_index()
+        else:
+            data = fetch_price_api_ohlcv(symbol)
+            if data is None:
+                data = yf_retry(lambda: yf.download(
+                    symbol,
+                    start=start_str,
+                    end=end_str,
+                    multi_level_index=False,
+                    progress=False,
+                    auto_adjust=True,
+                ))
+                data = data.reset_index()
         data.to_csv(data_file, index=False, encoding="utf-8")
 
     data = _clean_dataframe(data)
@@ -118,7 +235,7 @@ class StockstatsUtils:
             str, "curr date for retrieving stock price data, YYYY-mm-dd"
         ],
     ):
-        data = load_ohlcv(symbol, curr_date)
+        data = load_ohlcv(symbol, curr_date, indicator=indicator)
         df = wrap(data)
         df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
         curr_date_str = pd.to_datetime(curr_date).strftime("%Y-%m-%d")

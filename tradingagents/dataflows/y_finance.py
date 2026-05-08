@@ -4,7 +4,14 @@ from dateutil.relativedelta import relativedelta
 import pandas as pd
 import yfinance as yf
 import os
-from .stockstats_utils import StockstatsUtils, _clean_dataframe, yf_retry, load_ohlcv, filter_financials_by_date
+from .stockstats_utils import (
+    StockstatsUtils,
+    _clean_dataframe,
+    fetch_price_api_ohlcv,
+    yf_retry,
+    load_ohlcv,
+    filter_financials_by_date,
+)
 
 def get_YFin_data_online(
     symbol: Annotated[str, "ticker symbol of the company"],
@@ -14,12 +21,20 @@ def get_YFin_data_online(
 
     datetime.strptime(start_date, "%Y-%m-%d")
     datetime.strptime(end_date, "%Y-%m-%d")
+    start_dt = pd.to_datetime(start_date)
+    end_dt = pd.to_datetime(end_date)
 
-    # Create ticker object
-    ticker = yf.Ticker(symbol.upper())
+    # Prefer the primary price API and fall back to yfinance when unavailable.
+    data = fetch_price_api_ohlcv(symbol)
+    if data is not None:
+        data = data[(data["Date"] >= start_dt) & (data["Date"] < end_dt)].copy()
+    else:
+        # Create ticker object
+        ticker = yf.Ticker(symbol.upper())
 
-    # Fetch historical data for the specified date range
-    data = yf_retry(lambda: ticker.history(start=start_date, end=end_date))
+        # Fetch historical data for the specified date range
+        data = yf_retry(lambda: ticker.history(start=start_date, end=end_date))
+        data = data.reset_index()
 
     # Check if data is empty
     if data.empty:
@@ -27,9 +42,15 @@ def get_YFin_data_online(
             f"No data found for symbol '{symbol}' between {start_date} and {end_date}"
         )
 
-    # Remove timezone info from index for cleaner output
-    if data.index.tz is not None:
-        data.index = data.index.tz_localize(None)
+    # Normalise the date column for cleaner output.
+    if "Date" in data.columns:
+        data["Date"] = pd.to_datetime(data["Date"], errors="coerce")
+        if getattr(data["Date"].dt, "tz", None) is not None:
+            data["Date"] = data["Date"].dt.tz_localize(None)
+    else:
+        index_tz = getattr(data.index, "tz", None)
+        if index_tz is not None:
+            data.index = data.index.tz_localize(None)
 
     # Round numerical values to 2 decimal places for cleaner display
     numeric_columns = ["Open", "High", "Low", "Close", "Adj Close"]
@@ -197,7 +218,7 @@ def _get_stock_stats_bulk(
     """
     from stockstats import wrap
 
-    data = load_ohlcv(symbol, curr_date)
+    data = load_ohlcv(symbol, curr_date, indicator=indicator)
     df = wrap(data)
     df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
     
