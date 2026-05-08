@@ -47,6 +47,7 @@ def test_load_ohlcv_prefers_price_api_and_caches(tmp_path, monkeypatch):
     ]
     assert first["Open"].tolist() == [187.03, 184.2, 182.0]
     assert request_get.call_count == 1
+    assert request_get.call_args.args[0] == "https://example.test/prices/AAPL"
     assert yfinance_download.call_count == 0
 
     cache_files = list(tmp_path.glob("*.csv"))
@@ -90,6 +91,7 @@ def test_load_ohlcv_falls_back_to_yfinance_when_price_api_fails(tmp_path, monkey
     result = stockstats_utils.load_ohlcv("AAPL", "2024-01-03")
 
     assert request_get.call_count == 1
+    assert request_get.call_args.args[0] == "https://example.test/prices/AAPL"
     assert yfinance_download.call_count == 1
     assert result["Open"].tolist() == [10.0, 11.0]
     assert result["Volume"].tolist() == [100, 200]

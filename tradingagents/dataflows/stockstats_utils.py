@@ -49,7 +49,7 @@ def yf_retry(func, max_retries=3, base_delay=2.0):
                 raise
 
 
-def build_price_hmac_headers() -> Optional[dict[str, str]]:
+def build_price_hmac_headers(body: str = "") -> Optional[dict[str, str]]:
     secret = os.getenv("BACKTESTKING_HMAC_SECRET")
     if not secret:
         return None
@@ -57,7 +57,7 @@ def build_price_hmac_headers() -> Optional[dict[str, str]]:
     timestamp = str(int(time.time()))
     hmac_digest = hmac.new(
         secret.encode("utf-8"),
-        f"{timestamp}.".encode("utf-8"),
+        f"{timestamp}.{body}".encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
     return {
@@ -105,19 +105,19 @@ def fetch_price_api_ohlcv(symbol: str) -> Optional[pd.DataFrame]:
         logger.info("Price API disabled for %s: BACKTESTKING_PRICE_API_URL is not set", symbol)
         return None
 
-    headers = build_price_hmac_headers()
+    headers = build_price_hmac_headers(body="")
     request_headers = headers if headers else None
+    request_url = base_url.rstrip("/") + f"/{symbol.upper()}"
 
     logger.info(
         "Fetching price data for %s from primary endpoint %s",
         symbol.upper(),
-        base_url,
+        request_url,
     )
 
     try:
         response = requests.get(
-            base_url,
-            params={"ticker": symbol.upper()},
+            request_url,
             headers=request_headers,
             timeout=20,
         )
