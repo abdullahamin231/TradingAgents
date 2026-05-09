@@ -36,6 +36,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 REPORTS_DIR = REPO_ROOT / "reports"
 OPENCODE_CONFIG_PATH = REPO_ROOT / "opencode.json"
 DAILY_RUNS_DIRNAME = "daily_runs"
+REPORTS_SYSTEM_DIRS = {"cache", "memory", DAILY_RUNS_DIRNAME, "_legacy_root_artifacts"}
 DEFAULT_DAILY_TICKERS = (
     "MU","SNDK","MXL","LITE","AXTI","ICHR","AMD","SIMO","PBR.A","TSM","PBR","UCTT","SNEX","ASX","CRDO","DGELL","NVTS","TTE","COHU","BAC"
 )
@@ -85,6 +86,32 @@ _SECTION_TITLES = {
 }
 
 
+def _ensure_reports_layout() -> None:
+    """Keep UI-owned report artifacts under predictable subdirectories."""
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    for path in REPORTS_DIR.glob("*.md"):
+        target_dir = _legacy_markdown_target_dir(path.name)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = target_dir / path.name
+        if target_path.exists():
+            continue
+        path.replace(target_path)
+
+
+def _legacy_markdown_target_dir(filename: str) -> Path:
+    stem = Path(filename).stem
+    ticker_token = stem.split("_", 1)[0].strip().upper()
+    if ticker_token and 1 <= len(ticker_token) <= 5:
+        try:
+            safe_ticker = safe_ticker_component(ticker_token)
+        except ValueError:
+            safe_ticker = None
+        if safe_ticker == ticker_token:
+            return REPORTS_DIR / safe_ticker / "legacy"
+    return REPORTS_DIR / "_legacy_root_artifacts"
+
+
 def _markdown_to_html(text: str) -> str:
     if markdown is None:
         return f"<pre>{escape(text or '')}</pre>"
@@ -124,6 +151,7 @@ def build_run_config(
     quick_model: str | None = None,
     deep_model: str | None = None,
 ) -> dict[str, Any]:
+    _ensure_reports_layout()
     config = copy.deepcopy(DEFAULT_CONFIG)
     provider_lower = provider.lower()
     resolved_quick_model = (
@@ -338,12 +366,13 @@ class TradingJobManager:
 
 
 def list_report_tickers() -> list[dict[str, Any]]:
+    _ensure_reports_layout()
     tickers: list[dict[str, Any]] = []
     if not REPORTS_DIR.exists():
         return tickers
 
     for path in sorted(REPORTS_DIR.iterdir()):
-        if not path.is_dir() or path.name in {"cache", "memory"}:
+        if not path.is_dir() or path.name in REPORTS_SYSTEM_DIRS:
             continue
 
         logs = list_report_runs(path.name)
