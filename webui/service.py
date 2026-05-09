@@ -37,10 +37,7 @@ REPORTS_DIR = REPO_ROOT / "reports"
 OPENCODE_CONFIG_PATH = REPO_ROOT / "opencode.json"
 DAILY_RUNS_DIRNAME = "daily_runs"
 DEFAULT_DAILY_TICKERS = (
-    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL",
-    "META", "TSLA", "AVGO", "BRK.B", "JPM",
-    "LLY", "UNH", "XOM", "V", "COST",
-    "NFLX", "PG", "JNJ", "HD", "MA",
+    "MU","SNDK","MXL","LITE","AXTI","ICHR","AMD","SIMO","PBR.A","TSM","PBR","UCTT","SNEX","ASX","CRDO","DGELL","NVTS","TTE","COHU","BAC"
 )
 DAILY_COVERAGE_POLICY = (
     {"rating": "Buy", "action": "Allocate $5,000 into the ticker"},
