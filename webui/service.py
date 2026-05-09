@@ -37,6 +37,7 @@ REPORTS_DIR = REPO_ROOT / "reports"
 OPENCODE_CONFIG_PATH = REPO_ROOT / "opencode.json"
 DAILY_RUNS_DIRNAME = "daily_runs"
 REPORTS_SYSTEM_DIRS = {"cache", "memory", DAILY_RUNS_DIRNAME, "_legacy_root_artifacts"}
+_daily_manifest_lock = threading.RLock()
 DEFAULT_DAILY_TICKERS = (
     "MU","SNDK","MXL","LITE","AXTI","ICHR","AMD","SIMO","PBR.A","TSM","PBR","UCTT","SNEX","ASX","CRDO","DGELL","NVTS","TTE","COHU","BAC"
 )
@@ -486,6 +487,49 @@ def _daily_run_path(trade_date: str) -> Path:
     return _daily_runs_dir() / f"{trade_date}.json"
 
 
+def _load_json_payload(path: Path) -> tuple[dict[str, Any], bool]:
+    text = path.read_text(encoding="utf-8")
+
+    try:
+        payload = json.loads(text)
+        if not isinstance(payload, dict):
+            raise json.JSONDecodeError("Expected JSON object", text, 0)
+        return payload, False
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        idx = 0
+        recovered: dict[str, Any] | None = None
+        parsed_multiple = False
+
+        while idx < len(text):
+            while idx < len(text) and text[idx].isspace():
+                idx += 1
+            if idx >= len(text):
+                break
+
+            try:
+                payload, next_idx = decoder.raw_decode(text, idx)
+            except json.JSONDecodeError:
+                break
+
+            if isinstance(payload, dict):
+                recovered = payload
+                parsed_multiple = recovered is not None and next_idx < len(text)
+            idx = next_idx
+
+        if recovered is None:
+            raise
+
+        return recovered, parsed_multiple
+
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    tmp_path.replace(path)
+
+
 def _report_log_path(ticker: str, trade_date: str) -> Path:
     safe_ticker = safe_ticker_component(ticker)
     return REPORTS_DIR / safe_ticker / "TradingAgentsStrategy_logs" / f"full_states_log_{trade_date}.json"
@@ -524,11 +568,12 @@ def _default_daily_entry(ticker: str, trade_date: str) -> dict[str, Any]:
 
 
 def _write_daily_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
-    _daily_runs_dir().mkdir(parents=True, exist_ok=True)
-    path = _daily_run_path(manifest["trade_date"])
-    manifest["updated_at"] = datetime.utcnow().isoformat() + "Z"
-    path.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
-    return manifest
+    with _daily_manifest_lock:
+        _daily_runs_dir().mkdir(parents=True, exist_ok=True)
+        path = _daily_run_path(manifest["trade_date"])
+        manifest["updated_at"] = datetime.utcnow().isoformat() + "Z"
+        _atomic_write_json(path, manifest)
+        return manifest
 
 
 def _new_daily_manifest(trade_date: str) -> dict[str, Any]:
@@ -543,10 +588,15 @@ def _new_daily_manifest(trade_date: str) -> dict[str, Any]:
 
 
 def _load_daily_manifest(trade_date: str) -> dict[str, Any]:
-    path = _daily_run_path(trade_date)
-    if not path.exists():
-        return _new_daily_manifest(trade_date)
-    return json.loads(path.read_text(encoding="utf-8"))
+    with _daily_manifest_lock:
+        path = _daily_run_path(trade_date)
+        if not path.exists():
+            return _new_daily_manifest(trade_date)
+
+        manifest, repaired = _load_json_payload(path)
+        if repaired:
+            _atomic_write_json(path, manifest)
+        return manifest
 
 
 def _find_daily_entry(manifest: dict[str, Any], ticker: str) -> dict[str, Any]:
@@ -577,29 +627,30 @@ def _update_daily_run_job_state(
     started_at: str | None = None,
     completed_at: str | None = None,
 ) -> None:
-    path = _daily_run_path(trade_date)
-    if not path.exists():
-        return
+    with _daily_manifest_lock:
+        path = _daily_run_path(trade_date)
+        if not path.exists():
+            return
 
-    manifest = _load_daily_manifest(trade_date)
-    entry = _find_daily_entry(manifest, ticker)
-    if status is not None:
-        entry["status"] = status
-    if job_id is not None:
-        entry["job_id"] = job_id
-    if rating is not None:
-        entry["rating"] = rating
-    if report_path is not None:
-        entry["report_path"] = report_path
-    if started_at is not None:
-        entry["started_at"] = started_at
-    if completed_at is not None:
-        entry["completed_at"] = completed_at
-    if error is not None or status == "failed":
-        entry["error"] = error
-    if status == "completed":
-        entry["error"] = None
-    _write_daily_manifest(manifest)
+        manifest = _load_daily_manifest(trade_date)
+        entry = _find_daily_entry(manifest, ticker)
+        if status is not None:
+            entry["status"] = status
+        if job_id is not None:
+            entry["job_id"] = job_id
+        if rating is not None:
+            entry["rating"] = rating
+        if report_path is not None:
+            entry["report_path"] = report_path
+        if started_at is not None:
+            entry["started_at"] = started_at
+        if completed_at is not None:
+            entry["completed_at"] = completed_at
+        if error is not None or status == "failed":
+            entry["error"] = error
+        if status == "completed":
+            entry["error"] = None
+        _write_daily_manifest(manifest)
 
 
 def get_daily_watchlist() -> dict[str, Any]:
@@ -611,23 +662,24 @@ def get_daily_watchlist() -> dict[str, Any]:
 
 
 def prepare_daily_run(trade_date: str) -> dict[str, Any]:
-    manifest = _load_daily_manifest(trade_date)
-    manifest["policy"] = list(DAILY_COVERAGE_POLICY)
-    manifest["source"] = "hardcoded"
-    known = {entry["ticker"]: entry for entry in manifest["tickers"]}
-    tickers: list[dict[str, Any]] = []
-    for ticker in DEFAULT_DAILY_TICKERS:
-        safe_ticker = safe_ticker_component(ticker)
-        entry = known.get(safe_ticker, _default_daily_entry(safe_ticker, trade_date))
-        snapshot = _saved_report_snapshot(safe_ticker, trade_date)
-        if snapshot and entry["status"] != "running":
-            entry.update(snapshot)
-            entry["error"] = None
-            entry["job_id"] = entry.get("job_id")
-        tickers.append(entry)
-    manifest["tickers"] = tickers
-    _write_daily_manifest(manifest)
-    return get_daily_run(trade_date)
+    with _daily_manifest_lock:
+        manifest = _load_daily_manifest(trade_date)
+        manifest["policy"] = list(DAILY_COVERAGE_POLICY)
+        manifest["source"] = "hardcoded"
+        known = {entry["ticker"]: entry for entry in manifest["tickers"]}
+        tickers: list[dict[str, Any]] = []
+        for ticker in DEFAULT_DAILY_TICKERS:
+            safe_ticker = safe_ticker_component(ticker)
+            entry = known.get(safe_ticker, _default_daily_entry(safe_ticker, trade_date))
+            snapshot = _saved_report_snapshot(safe_ticker, trade_date)
+            if snapshot and entry["status"] != "running":
+                entry.update(snapshot)
+                entry["error"] = None
+                entry["job_id"] = entry.get("job_id")
+            tickers.append(entry)
+        manifest["tickers"] = tickers
+        _write_daily_manifest(manifest)
+        return get_daily_run(trade_date)
 
 
 def get_daily_run(trade_date: str) -> dict[str, Any]:
@@ -648,37 +700,38 @@ def queue_daily_run_entries(
     tickers: list[str] | None = None,
     retry_failed_only: bool = False,
 ) -> dict[str, Any]:
-    manifest = prepare_daily_run(trade_date)
-    manifest_payload = _load_daily_manifest(trade_date)
-    selected = {safe_ticker_component(t) for t in tickers} if tickers else None
-    queued: list[dict[str, Any]] = []
+    with _daily_manifest_lock:
+        prepare_daily_run(trade_date)
+        manifest_payload = _load_daily_manifest(trade_date)
+        selected = {safe_ticker_component(t) for t in tickers} if tickers else None
+        queued: list[dict[str, Any]] = []
 
-    for entry in manifest_payload["tickers"]:
-        if selected and entry["ticker"] not in selected:
-            continue
-        if entry["status"] == "completed":
-            continue
-        if retry_failed_only and entry["status"] != "failed":
-            continue
-        if entry["status"] in {"queued", "running"}:
-            continue
+        for entry in manifest_payload["tickers"]:
+            if selected and entry["ticker"] not in selected:
+                continue
+            if entry["status"] == "completed":
+                continue
+            if retry_failed_only and entry["status"] != "failed":
+                continue
+            if entry["status"] in {"queued", "running"}:
+                continue
 
-        job = job_manager.submit(
-            entry["ticker"],
-            trade_date,
-            WORKFLOW_DAILY_COVERAGE,
-            provider,
-            quick_model,
-            deep_model,
-        )
-        entry["status"] = "queued"
-        entry["job_id"] = job.job_id
-        entry["error"] = None
-        entry["started_at"] = None
-        entry["completed_at"] = None
-        queued.append({"ticker": entry["ticker"], "job_id": job.job_id})
+            job = job_manager.submit(
+                entry["ticker"],
+                trade_date,
+                WORKFLOW_DAILY_COVERAGE,
+                provider,
+                quick_model,
+                deep_model,
+            )
+            entry["status"] = "queued"
+            entry["job_id"] = job.job_id
+            entry["error"] = None
+            entry["started_at"] = None
+            entry["completed_at"] = None
+            queued.append({"ticker": entry["ticker"], "job_id": job.job_id})
 
-    _write_daily_manifest(manifest_payload)
-    updated = get_daily_run(trade_date)
-    updated["queued_jobs"] = queued
-    return updated
+        _write_daily_manifest(manifest_payload)
+        updated = get_daily_run(trade_date)
+        updated["queued_jobs"] = queued
+        return updated

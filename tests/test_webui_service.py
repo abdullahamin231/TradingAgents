@@ -244,3 +244,56 @@ def test_run_job_updates_daily_manifest_with_rating(tmp_path, monkeypatch):
     assert entry["status"] == "completed"
     assert entry["rating"] == "Overweight"
     assert entry["report_path"].endswith("complete_report.md")
+
+
+def test_queue_daily_run_recovers_concatenated_manifest(tmp_path, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
+    monkeypatch.setattr(service, "DEFAULT_DAILY_TICKERS", ("SPY", "NVDA"))
+
+    daily_dir = reports_dir / service.DAILY_RUNS_DIRNAME
+    daily_dir.mkdir(parents=True)
+    bad_manifest = (
+        json.dumps(
+            {
+                "trade_date": "2026-05-09",
+                "source": "hardcoded",
+                "policy": [],
+                "tickers": [],
+                "created_at": "2026-05-09T00:00:00Z",
+                "updated_at": "2026-05-09T00:00:00Z",
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "trade_date": "2026-05-09",
+                "source": "hardcoded",
+                "policy": [],
+                "tickers": [],
+                "created_at": "2026-05-09T01:00:00Z",
+                "updated_at": "2026-05-09T01:00:00Z",
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    (daily_dir / "2026-05-09.json").write_text(bad_manifest, encoding="utf-8")
+
+    class FakeJobManager:
+        def __init__(self):
+            self.calls = []
+
+        def submit(self, ticker, trade_date, workflow, provider, quick_model, deep_model):
+            self.calls.append((ticker, trade_date, workflow, provider, quick_model, deep_model))
+            return type("Job", (), {"job_id": f"job-{ticker.lower()}"})()
+
+    manager = FakeJobManager()
+    queued = service.queue_daily_run_entries(manager, "2026-05-09", provider="opencode")
+
+    assert [call[0] for call in manager.calls] == ["SPY", "NVDA"]
+    assert queued["summary"]["total"] == 2
+    assert queued["summary"]["queued"] == 2
