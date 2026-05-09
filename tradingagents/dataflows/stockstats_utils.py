@@ -218,6 +218,12 @@ def load_ohlcv(symbol: str, curr_date: str, indicator: Optional[str] = None) -> 
                     auto_adjust=True,
                 ))
                 data = data.reset_index()
+            else:
+                data["Date"] = pd.to_datetime(data["Date"], errors="coerce")
+                data = data[
+                    (data["Date"] >= pd.to_datetime(start_str))
+                    & (data["Date"] < pd.to_datetime(end_str))
+                ].copy()
         data.to_csv(data_file, index=False, encoding="utf-8")
         logger.info("Cached %s data for %s at %s", source, symbol.upper(), data_file)
 
