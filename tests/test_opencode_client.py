@@ -43,20 +43,6 @@ class TestOpenCodeClient:
         assert mock_run.call_args.args[0] == ["opencode", "run", "Prompt text"]
 
     @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
-    def test_invoke_raises_with_stderr_when_binary_fails(self, mock_run):
-        mock_run.side_effect = subprocess.CalledProcessError(
-            returncode=17,
-            cmd=["opencode", "run", "Prompt text"],
-            output="",
-            stderr="boom from stderr\n",
-        )
-
-        client = OpenCodeClient("any-model")
-
-        with pytest.raises(RuntimeError, match=r"opencode exited with status 17: boom from stderr"):
-            client.invoke("Prompt text")
-
-    @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
     def test_with_structured_output_parses_json(self, mock_run):
         mock_run.return_value = subprocess.CompletedProcess(
             args=["binary", "run", "prompt"],

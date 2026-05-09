@@ -205,21 +205,12 @@ class OpenCodeClient(BaseLLMClient):
         return RunnableLambda(_invoke_structured)
 
     def _run_binary(self, prompt: str) -> str:
-        try:
-            completed = subprocess.run(
-                [*_DEFAULT_OPENCODE_COMMAND, prompt],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-        except subprocess.CalledProcessError as exc:
-            stderr = (exc.stderr or "").strip()
-            stdout = (exc.stdout or "").strip()
-            details = stderr or stdout or "no stderr/stdout captured"
-            raise RuntimeError(
-                f"opencode exited with status {exc.returncode}: {details}"
-            ) from exc
-
+        completed = subprocess.run(
+            [*_DEFAULT_OPENCODE_COMMAND, prompt],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
         return completed.stdout.strip()
 
     def _normalize_prompt(self, input: Any) -> str:
