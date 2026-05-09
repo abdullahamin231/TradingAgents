@@ -1,41 +1,57 @@
-const runRows = document.querySelector("#run-rows");
-const addRowButton = document.querySelector("#add-row");
-const submitRunsButton = document.querySelector("#submit-runs");
+const tabButtons = [...document.querySelectorAll(".tab-button")];
+const tabPanels = [...document.querySelectorAll(".tab-panel")];
 const jobsList = document.querySelector("#jobs-list");
 const tickerSelect = document.querySelector("#ticker-select");
 const reportSelect = document.querySelector("#report-select");
 const tickerSummary = document.querySelector("#ticker-summary");
 const reportTitle = document.querySelector("#report-title");
 const reportView = document.querySelector("#report-view");
-const providerSelect = document.querySelector("#provider-select");
-const modelInput = document.querySelector("#model-input");
-const opencodeModelField = document.querySelector("#opencode-model-field");
-const providerModelFields = document.querySelector("#provider-model-fields");
-const quickModelInput = document.querySelector("#quick-model-input");
-const deepModelInput = document.querySelector("#deep-model-input");
-const sharedDateInput = document.querySelector("#shared-date");
-const composerMessage = document.querySelector("#composer-message");
+const dailyWatchlist = document.querySelector("#daily-watchlist");
+const dailyPolicy = document.querySelector("#daily-policy");
+const dailySummary = document.querySelector("#daily-summary");
+const dailyStatusTable = document.querySelector("#daily-status-table");
+const dailyStatusDate = document.querySelector("#daily-status-date");
+
+const onDemandSubmitButton = document.querySelector("#on-demand-submit");
+const onDemandTickerInput = document.querySelector("#on-demand-ticker");
+const onDemandDateInput = document.querySelector("#on-demand-date");
+const onDemandMessage = document.querySelector("#on-demand-message");
+
+const dailyPrepareButton = document.querySelector("#prepare-daily-run");
+const dailyRunMissingButton = document.querySelector("#run-missing-daily");
+const dailyDateInput = document.querySelector("#daily-date");
+const dailyMessage = document.querySelector("#daily-message");
+
+const providerGroups = {
+  "on-demand": {
+    select: document.querySelector("#on-demand-provider-select"),
+    opencodeField: document.querySelector("#on-demand-opencode-model-field"),
+    providerFields: document.querySelector("#on-demand-provider-model-fields"),
+    modelInput: document.querySelector("#on-demand-model-input"),
+    quickInput: document.querySelector("#on-demand-quick-model-input"),
+    deepInput: document.querySelector("#on-demand-deep-model-input"),
+  },
+  daily: {
+    select: document.querySelector("#daily-provider-select"),
+    opencodeField: document.querySelector("#daily-opencode-model-field"),
+    providerFields: document.querySelector("#daily-provider-model-fields"),
+    modelInput: document.querySelector("#daily-model-input"),
+    quickInput: document.querySelector("#daily-quick-model-input"),
+    deepInput: document.querySelector("#daily-deep-model-input"),
+  },
+};
 
 let providerOptions = [];
+let activeDailyTradeDate = window.TRADINGAGENTS_DEFAULT_DATE;
 
-function createRunRow(initialTicker = "") {
-  const row = document.createElement("div");
-  row.className = "run-row";
-  row.innerHTML = `
-    <input class="ticker-input" type="text" placeholder="Symbol (e.g. NVDA)" value="${initialTicker}" spellcheck="false" />
-    <button class="remove-row" type="button" aria-label="Remove symbol">-</button>
-  `;
-  row.querySelector(".remove-row").addEventListener("click", () => {
-    if (runRows.children.length > 1) {
-      row.remove();
-    }
-  });
-  runRows.appendChild(row);
+function setTab(target) {
+  tabButtons.forEach((button) => button.classList.toggle("active", button.dataset.tabTarget === target));
+  tabPanels.forEach((panel) => panel.classList.toggle("active", panel.id === target));
 }
 
-function setComposerMessage(message = "", isError = false) {
-  composerMessage.textContent = message;
-  composerMessage.style.color = isError ? "var(--danger)" : "var(--muted)";
+function setMessage(node, message = "", isError = false) {
+  node.textContent = message;
+  node.style.color = isError ? "var(--danger)" : "var(--muted)";
 }
 
 function isValidTradeDate(value) {
@@ -46,43 +62,57 @@ function statusClass(status) {
   return `status-pill status-${status || "queued"}`;
 }
 
-function updateModelDefault(providerValue) {
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function updateModelDefault(groupName, providerValue) {
+  const group = providerGroups[groupName];
   const provider = providerOptions.find((item) => item.value === providerValue);
-  if (!provider) {
+  if (!group || !provider) {
     return;
   }
 
   const isOpenCode = providerValue === "opencode";
-  opencodeModelField.classList.toggle("hidden", !isOpenCode);
-  providerModelFields.classList.toggle("hidden", isOpenCode);
+  group.opencodeField.classList.toggle("hidden", !isOpenCode);
+  group.providerFields.classList.toggle("hidden", isOpenCode);
 
   if (isOpenCode) {
-    modelInput.value = provider.default_deep_model || provider.default_quick_model || "";
-    modelInput.placeholder = provider.note || "Model name or deployment";
+    group.modelInput.value = provider.default_deep_model || provider.default_quick_model || "";
+    group.modelInput.placeholder = provider.note || "Model name or deployment";
     return;
   }
 
-  quickModelInput.value = provider.default_quick_model || "";
-  deepModelInput.value = provider.default_deep_model || "";
-  quickModelInput.placeholder = provider.note || "Quick think model";
-  deepModelInput.placeholder = provider.note || "Deep think model";
+  group.quickInput.value = provider.default_quick_model || "";
+  group.deepInput.value = provider.default_deep_model || "";
+  group.quickInput.placeholder = provider.note || "Quick think model";
+  group.deepInput.placeholder = provider.note || "Deep think model";
 }
 
 function renderProviders() {
-  if (!providerOptions.length) {
-    return;
-  }
+  Object.entries(providerGroups).forEach(([groupName, group]) => {
+    group.select.innerHTML = providerOptions
+      .map((provider) => `<option value="${provider.value}">${provider.label}</option>`)
+      .join("");
+    group.select.value = providerOptions[0]?.value || "opencode";
+    updateModelDefault(groupName, group.select.value);
+  });
+}
 
-  providerSelect.innerHTML = providerOptions
-    .map(
-      (provider) => `
-        <option value="${provider.value}">${provider.label}</option>
-      `
-    )
-    .join("");
-
-  providerSelect.value = providerOptions[0].value;
-  updateModelDefault(providerSelect.value);
+function providerPayload(groupName) {
+  const group = providerGroups[groupName];
+  const provider = group.select.value;
+  return {
+    provider,
+    model: provider === "opencode" ? group.modelInput.value.trim() : null,
+    quick_model: provider === "opencode" ? null : group.quickInput.value.trim(),
+    deep_model: provider === "opencode" ? null : group.deepInput.value.trim(),
+  };
 }
 
 function renderJobs(jobs) {
@@ -98,17 +128,18 @@ function renderJobs(jobs) {
       (job) => `
         <article class="job-card">
           <div class="job-top">
-            <strong>${job.ticker} / ${job.trade_date}</strong>
-            <span class="${statusClass(job.status)}">${job.status}</span>
+            <strong>${escapeHtml(job.ticker)} / ${escapeHtml(job.trade_date)}</strong>
+            <span class="${statusClass(job.status)}">${escapeHtml(job.status)}</span>
           </div>
-          <p class="job-meta">Job ${job.job_id.slice(0, 8)} · Provider: ${job.provider || "opencode"}</p>
+          <p class="job-meta">Workflow: ${escapeHtml(job.workflow || "analysis_on_demand")} · Job ${escapeHtml(job.job_id.slice(0, 8))}</p>
+          <p class="job-meta">Provider: ${escapeHtml(job.provider || "opencode")}</p>
           ${
             job.provider === "opencode"
-              ? `<p class="job-meta">Model: ${job.deep_model || job.quick_model || "default"}</p>`
-              : `<p class="job-meta">Quick: ${job.quick_model || "default"} · Deep: ${job.deep_model || "default"}</p>`
+              ? `<p class="job-meta">Model: ${escapeHtml(job.deep_model || job.quick_model || "default")}</p>`
+              : `<p class="job-meta">Quick: ${escapeHtml(job.quick_model || "default")} · Deep: ${escapeHtml(job.deep_model || "default")}</p>`
           }
-          ${job.report_path ? `<p class="job-meta">Full report: ${job.report_path}</p>` : ""}
-          <p>${job.decision || job.error || "Waiting for completion..."}</p>
+          ${job.report_path ? `<p class="job-meta">Full report: ${escapeHtml(job.report_path)}</p>` : ""}
+          <p>${escapeHtml(job.decision || job.error || "Waiting for completion...")}</p>
         </article>
       `
     )
@@ -120,15 +151,10 @@ async function loadProviders() {
     const response = await fetch("/api/providers");
     const payload = await response.json();
     providerOptions = payload.providers || [];
-    renderProviders();
   } catch (error) {
-    providerOptions = [];
-    providerSelect.innerHTML = `<option value="opencode">OpenCode</option>`;
-    providerSelect.value = "opencode";
-    opencodeModelField.classList.remove("hidden");
-    providerModelFields.classList.add("hidden");
-    modelInput.placeholder = "Model name or deployment";
+    providerOptions = [{ label: "OpenCode", value: "opencode", default_deep_model: "", default_quick_model: "" }];
   }
+  renderProviders();
 }
 
 async function fetchJobs() {
@@ -137,52 +163,238 @@ async function fetchJobs() {
   renderJobs(payload.jobs || []);
 }
 
-async function submitRuns() {
-  const tradeDate = sharedDateInput.value.trim();
+async function submitOnDemandRun() {
+  const tradeDate = onDemandDateInput.value.trim();
+  const ticker = onDemandTickerInput.value.trim();
   if (!isValidTradeDate(tradeDate)) {
-    setComposerMessage("Date must use YYYY-MM-DD.", true);
+    setMessage(onDemandMessage, "Date must use YYYY-MM-DD.", true);
+    return;
+  }
+  if (!ticker) {
+    setMessage(onDemandMessage, "Enter one ticker.", true);
     return;
   }
 
-  const rows = [...runRows.querySelectorAll(".run-row")];
-  const runs = rows
-    .map((row) => ({
-      ticker: row.querySelector(".ticker-input").value.trim(),
-      trade_date: tradeDate,
-      provider: providerSelect.value,
-      model: providerSelect.value === "opencode" ? modelInput.value.trim() : null,
-      quick_model: providerSelect.value === "opencode" ? null : quickModelInput.value.trim(),
-      deep_model: providerSelect.value === "opencode" ? null : deepModelInput.value.trim(),
-    }))
-    .filter((run) => run.ticker);
-
-  if (!runs.length) {
-    setComposerMessage("Enter at least one symbol.", true);
-    return;
-  }
-
-  submitRunsButton.disabled = true;
-  setComposerMessage("");
+  onDemandSubmitButton.disabled = true;
+  setMessage(onDemandMessage, "");
   try {
-    const response = await fetch("/api/jobs", {
+    const response = await fetch("/api/on-demand/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ runs }),
+      body: JSON.stringify({
+        ticker,
+        trade_date: tradeDate,
+        ...providerPayload("on-demand"),
+      }),
     });
+    const payload = await response.json();
     if (!response.ok) {
-      const payload = await response.json();
-      setComposerMessage(payload.detail || "Run submission failed.", true);
+      setMessage(onDemandMessage, payload.detail || "Run submission failed.", true);
       return;
     }
-    const providerLabel = providerSelect.options[providerSelect.selectedIndex]?.textContent || providerSelect.value;
-    setComposerMessage(
-      `Queued ${runs.length} symbol${runs.length === 1 ? "" : "s"} for ${tradeDate} with ${providerLabel}.`
-    );
+    setMessage(onDemandMessage, `Queued ${ticker.toUpperCase()} for ${tradeDate}.`);
     await fetchJobs();
     await loadTickers();
   } finally {
-    submitRunsButton.disabled = false;
+    onDemandSubmitButton.disabled = false;
   }
+}
+
+function renderDailyWatchlist(payload) {
+  const tickers = payload.tickers || [];
+  const policy = payload.policy || [];
+
+  dailyWatchlist.className = tickers.length ? "ticker-list" : "ticker-list empty-state";
+  dailyWatchlist.innerHTML = tickers.length
+    ? tickers.map((ticker) => `<span class="report-chip">${escapeHtml(ticker)}</span>`).join("")
+    : "No watchlist configured.";
+
+  dailyPolicy.className = policy.length ? "policy-list" : "policy-list empty-state";
+  dailyPolicy.innerHTML = policy.length
+    ? policy
+        .map(
+          (item) => `
+            <article class="policy-card">
+              <strong>${escapeHtml(item.rating)}</strong>
+              <p>${escapeHtml(item.action)}</p>
+            </article>
+          `
+        )
+        .join("")
+    : "No policy configured.";
+}
+
+function renderDailySummary(summary = null) {
+  if (!summary) {
+    dailySummary.className = "summary-strip empty-state";
+    dailySummary.textContent = "Prepare a daily run to create the manifest.";
+    return;
+  }
+
+  const items = [
+    ["Total", summary.total],
+    ["Pending", summary.pending],
+    ["Queued", summary.queued],
+    ["Running", summary.running],
+    ["Completed", summary.completed],
+    ["Failed", summary.failed],
+  ];
+
+  dailySummary.className = "summary-strip";
+  dailySummary.innerHTML = items
+    .map(
+      ([label, value]) => `
+        <div class="summary-card">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function renderDailyManifest(payload) {
+  activeDailyTradeDate = payload.trade_date || dailyDateInput.value.trim();
+  dailyStatusDate.textContent = activeDailyTradeDate;
+  renderDailySummary(payload.summary || null);
+
+  const tickers = payload.tickers || [];
+  if (!tickers.length) {
+    dailyStatusTable.className = "daily-table-shell empty-state";
+    dailyStatusTable.textContent = "No manifest prepared yet.";
+    return;
+  }
+
+  dailyStatusTable.className = "daily-table-shell";
+  dailyStatusTable.innerHTML = `
+    <table class="daily-table">
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Status</th>
+          <th>Rating</th>
+          <th>Report</th>
+          <th>Error</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tickers
+          .map(
+            (entry) => `
+              <tr>
+                <td><strong>${escapeHtml(entry.ticker)}</strong></td>
+                <td><span class="${statusClass(entry.status)}">${escapeHtml(entry.status)}</span></td>
+                <td>${escapeHtml(entry.rating || "n/a")}</td>
+                <td>${entry.report_path ? `<code>${escapeHtml(entry.report_path)}</code>` : "n/a"}</td>
+                <td class="error-cell">${escapeHtml(entry.error || "")}</td>
+                <td>
+                  ${
+                    entry.status === "failed"
+                      ? `<button class="mini-button" type="button" data-retry-ticker="${escapeHtml(entry.ticker)}">Retry</button>`
+                      : entry.status === "completed"
+                      ? "Complete"
+                      : "Waiting"
+                  }
+                </td>
+              </tr>
+            `
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+async function loadDailyWatchlist() {
+  const response = await fetch("/api/daily-watchlist");
+  const payload = await response.json();
+  renderDailyWatchlist(payload);
+}
+
+async function loadDailyManifest(tradeDate, { quiet = false } = {}) {
+  if (!isValidTradeDate(tradeDate)) {
+    if (!quiet) {
+      setMessage(dailyMessage, "Date must use YYYY-MM-DD.", true);
+    }
+    return;
+  }
+
+  const response = await fetch(`/api/daily-runs/${encodeURIComponent(tradeDate)}`);
+  const payload = await response.json();
+  renderDailyManifest(payload);
+}
+
+async function prepareDailyRun() {
+  const tradeDate = dailyDateInput.value.trim();
+  if (!isValidTradeDate(tradeDate)) {
+    setMessage(dailyMessage, "Date must use YYYY-MM-DD.", true);
+    return;
+  }
+
+  dailyPrepareButton.disabled = true;
+  setMessage(dailyMessage, "");
+  try {
+    const response = await fetch(`/api/daily-runs/${encodeURIComponent(tradeDate)}/prepare`, { method: "POST" });
+    const payload = await response.json();
+    if (!response.ok) {
+      setMessage(dailyMessage, payload.detail || "Failed to prepare daily run.", true);
+      return;
+    }
+    renderDailyManifest(payload);
+    setMessage(dailyMessage, `Prepared daily manifest for ${tradeDate}.`);
+  } finally {
+    dailyPrepareButton.disabled = false;
+  }
+}
+
+async function runMissingDaily() {
+  const tradeDate = dailyDateInput.value.trim();
+  if (!isValidTradeDate(tradeDate)) {
+    setMessage(dailyMessage, "Date must use YYYY-MM-DD.", true);
+    return;
+  }
+
+  dailyRunMissingButton.disabled = true;
+  setMessage(dailyMessage, "");
+  try {
+    const response = await fetch(`/api/daily-runs/${encodeURIComponent(tradeDate)}/run-missing`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(providerPayload("daily")),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setMessage(dailyMessage, payload.detail || "Failed to queue daily run.", true);
+      return;
+    }
+    renderDailyManifest(payload);
+    const queuedCount = (payload.queued_jobs || []).length;
+    setMessage(
+      dailyMessage,
+      queuedCount ? `Queued ${queuedCount} ticker${queuedCount === 1 ? "" : "s"} for ${tradeDate}.` : `No missing tickers to queue for ${tradeDate}.`
+    );
+    await fetchJobs();
+  } finally {
+    dailyRunMissingButton.disabled = false;
+  }
+}
+
+async function retryDailyTicker(ticker) {
+  const tradeDate = dailyDateInput.value.trim();
+  const response = await fetch(`/api/daily-runs/${encodeURIComponent(tradeDate)}/tickers/${encodeURIComponent(ticker)}/retry`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(providerPayload("daily")),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    setMessage(dailyMessage, payload.detail || `Failed to retry ${ticker}.`, true);
+    return;
+  }
+  renderDailyManifest(payload);
+  setMessage(dailyMessage, `Queued retry for ${ticker} on ${tradeDate}.`);
+  await fetchJobs();
 }
 
 async function loadTickers() {
@@ -209,7 +421,7 @@ async function loadTickers() {
     <div class="ticker-list">
       ${tickers
         .map(
-          (ticker) => `<span class="report-chip">${ticker.ticker} · ${ticker.report_count} logs · latest ${ticker.latest_trade_date || "n/a"}</span>`
+          (ticker) => `<span class="report-chip">${escapeHtml(ticker.ticker)} · ${escapeHtml(ticker.report_count)} logs · latest ${escapeHtml(ticker.latest_trade_date || "n/a")}</span>`
         )
         .join("")}
     </div>
@@ -250,13 +462,13 @@ async function loadReport(ticker, tradeDate) {
   reportView.className = "report-view";
   reportView.innerHTML = `
     <div class="report-header">
-      <p class="report-meta">Company of interest: ${payload.company_of_interest}</p>
+      <p class="report-meta">Company of interest: ${escapeHtml(payload.company_of_interest)}</p>
     </div>
     ${payload.sections
       .map(
         (section) => `
           <section class="section-card">
-            <h3>${section.title}</h3>
+            <h3>${escapeHtml(section.title)}</h3>
             <div class="html">${section.html}</div>
           </section>
         `
@@ -266,7 +478,7 @@ async function loadReport(ticker, tradeDate) {
       .map(
         (section) => `
           <section class="debate-card">
-            <h3>${section.title}</h3>
+            <h3>${escapeHtml(section.title)}</h3>
             <div class="html">${section.html}</div>
           </section>
         `
@@ -275,16 +487,39 @@ async function loadReport(ticker, tradeDate) {
   `;
 }
 
-addRowButton.addEventListener("click", () => createRunRow());
-submitRunsButton.addEventListener("click", submitRuns);
+tabButtons.forEach((button) => {
+  button.addEventListener("click", () => setTab(button.dataset.tabTarget));
+});
+
+Object.entries(providerGroups).forEach(([groupName, group]) => {
+  group.select.addEventListener("change", (event) => updateModelDefault(groupName, event.target.value));
+});
+
+onDemandSubmitButton.addEventListener("click", submitOnDemandRun);
+onDemandDateInput.addEventListener("input", () => setMessage(onDemandMessage, ""));
+onDemandTickerInput.addEventListener("input", () => setMessage(onDemandMessage, ""));
+dailyDateInput.addEventListener("input", () => {
+  setMessage(dailyMessage, "");
+  dailyStatusDate.textContent = dailyDateInput.value.trim() || window.TRADINGAGENTS_DEFAULT_DATE;
+});
+dailyPrepareButton.addEventListener("click", prepareDailyRun);
+dailyRunMissingButton.addEventListener("click", runMissingDaily);
+dailyStatusTable.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-retry-ticker]");
+  if (!button) {
+    return;
+  }
+  retryDailyTicker(button.dataset.retryTicker);
+});
 tickerSelect.addEventListener("change", (event) => loadReportsForTicker(event.target.value));
 reportSelect.addEventListener("change", () => loadReport(tickerSelect.value, reportSelect.value));
-sharedDateInput.addEventListener("input", () => setComposerMessage(""));
-providerSelect.addEventListener("change", (event) => updateModelDefault(event.target.value));
 
-createRunRow("SPY");
-createRunRow("NVDA");
 loadProviders();
 fetchJobs();
+loadDailyWatchlist();
+loadDailyManifest(window.TRADINGAGENTS_DEFAULT_DATE, { quiet: true });
 loadTickers();
-setInterval(fetchJobs, 5000);
+setInterval(() => {
+  fetchJobs();
+  loadDailyManifest(activeDailyTradeDate, { quiet: true });
+}, 5000);

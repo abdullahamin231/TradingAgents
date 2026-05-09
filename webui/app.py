@@ -12,10 +12,14 @@ from pydantic import BaseModel, Field
 
 from .service import (
     TradingJobManager,
+    get_daily_run,
+    get_daily_watchlist,
     list_llm_providers,
     list_report_tickers,
     list_report_runs,
     load_report,
+    prepare_daily_run,
+    queue_daily_run_entries,
 )
 
 
@@ -37,6 +41,13 @@ class RunRequest(BaseModel):
 
 class BatchRunRequest(BaseModel):
     runs: list[RunRequest] = Field(min_length=1, max_length=24)
+
+
+class DailyRunQueueRequest(BaseModel):
+    provider: str = Field(default="opencode", min_length=1, max_length=32)
+    model: str | None = Field(default=None, max_length=128)
+    quick_model: str | None = Field(default=None, max_length=128)
+    deep_model: str | None = Field(default=None, max_length=128)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -75,6 +86,7 @@ def create_jobs(payload: BatchRunRequest) -> dict:
             job_manager.submit(
                 run.ticker,
                 run.trade_date,
+                "analysis_on_demand",
                 run.provider,
                 run.quick_model or run.model,
                 run.deep_model or run.model,
@@ -84,6 +96,73 @@ def create_jobs(payload: BatchRunRequest) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"jobs": [job_manager.get_job(job.job_id) for job in jobs]}
+
+
+@app.post("/api/on-demand/run")
+def run_on_demand(payload: RunRequest) -> dict:
+    try:
+        job = job_manager.submit(
+            payload.ticker,
+            payload.trade_date,
+            "analysis_on_demand",
+            payload.provider,
+            payload.quick_model or payload.model,
+            payload.deep_model or payload.model,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"job": job_manager.get_job(job.job_id)}
+
+
+@app.get("/api/daily-watchlist")
+def daily_watchlist() -> dict:
+    return get_daily_watchlist()
+
+
+@app.get("/api/daily-runs/{trade_date}")
+def daily_run(trade_date: str) -> dict:
+    try:
+        return get_daily_run(trade_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/daily-runs/{trade_date}/prepare")
+def prepare_daily_coverage(trade_date: str) -> dict:
+    try:
+        return prepare_daily_run(trade_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/daily-runs/{trade_date}/run-missing")
+def queue_daily_coverage(trade_date: str, payload: DailyRunQueueRequest) -> dict:
+    try:
+        return queue_daily_run_entries(
+            job_manager,
+            trade_date,
+            provider=payload.provider,
+            quick_model=payload.quick_model or payload.model,
+            deep_model=payload.deep_model or payload.model,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/daily-runs/{trade_date}/tickers/{ticker}/retry")
+def retry_daily_ticker(trade_date: str, ticker: str, payload: DailyRunQueueRequest) -> dict:
+    try:
+        return queue_daily_run_entries(
+            job_manager,
+            trade_date,
+            provider=payload.provider,
+            quick_model=payload.quick_model or payload.model,
+            deep_model=payload.deep_model or payload.model,
+            tickers=[ticker],
+            retry_failed_only=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/tickers")

@@ -6,7 +6,10 @@
     <title>TradingAgents</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
@@ -14,7 +17,8 @@
       <header class="topbar">
         <div class="topbar-copy">
           <p class="eyebrow">TradingAgents</p>
-          <h1>Run Analysis</h1>
+          <h1>Coverage Console</h1>
+          <p class="hero-note">Run one-off analysis, prepare the daily 20-name slate, and inspect saved reports from one place.</p>
         </div>
         <div class="topbar-meta">
           <span>Default date</span>
@@ -22,106 +26,185 @@
         </div>
       </header>
 
-      <section class="grid">
-        <article class="panel composer">
-          <div class="panel-head">
-            <p class="panel-kicker">Config</p>
-            <h2>Batch run</h2>
-          </div>
-          <div class="shared-controls">
-            <label class="field">
-              <span class="field-label">Provider</span>
-              <select id="provider-select">
-                <option value="opencode">OpenCode</option>
-              </select>
-            </label>
-            <label class="field" id="opencode-model-field">
-              <span class="field-label">Model / deployment</span>
-              <input
-                id="model-input"
-                class="shared-model-input"
-                type="text"
-                spellcheck="false"
-                placeholder="Model name or deployment"
-                value=""
-              />
-            </label>
-            <div id="provider-model-fields" class="provider-model-fields hidden">
+      <nav class="tabs" aria-label="Primary">
+        <button class="tab-button active" type="button" data-tab-target="on-demand">Analysis On-Demand</button>
+        <button class="tab-button" type="button" data-tab-target="daily-coverage">Daily Coverage</button>
+        <button class="tab-button" type="button" data-tab-target="saved-reports">Saved Reports</button>
+      </nav>
+
+      <section id="on-demand" class="tab-panel active">
+        <div class="grid">
+          <article class="panel composer">
+            <div class="panel-head">
+              <p class="panel-kicker">Manual</p>
+              <h2>Single ticker run</h2>
+            </div>
+            <div class="shared-controls">
               <label class="field">
-                <span class="field-label">Quick think model</span>
+                <span class="field-label">Provider</span>
+                <select id="on-demand-provider-select">
+                  <option value="opencode">OpenCode</option>
+                </select>
+              </label>
+              <label class="field" id="on-demand-opencode-model-field">
+                <span class="field-label">Model / deployment</span>
                 <input
-                  id="quick-model-input"
+                  id="on-demand-model-input"
                   type="text"
                   spellcheck="false"
-                  placeholder="Quick think model"
+                  placeholder="Model name or deployment"
                   value=""
                 />
               </label>
+              <div id="on-demand-provider-model-fields" class="provider-model-fields hidden">
+                <label class="field">
+                  <span class="field-label">Quick think model</span>
+                  <input id="on-demand-quick-model-input" type="text" spellcheck="false" placeholder="Quick think model" value="" />
+                </label>
+                <label class="field">
+                  <span class="field-label">Deep think model</span>
+                  <input id="on-demand-deep-model-input" type="text" spellcheck="false" placeholder="Deep think model" value="" />
+                </label>
+              </div>
               <label class="field">
-                <span class="field-label">Deep think model</span>
+                <span class="field-label">Trade date</span>
                 <input
-                  id="deep-model-input"
+                  id="on-demand-date"
+                  type="text"
+                  inputmode="numeric"
+                  spellcheck="false"
+                  placeholder="YYYY-MM-DD"
+                  value="{{ today }}"
+                />
+              </label>
+              <label class="field">
+                <span class="field-label">Ticker</span>
+                <input id="on-demand-ticker" type="text" spellcheck="false" placeholder="Symbol (e.g. NVDA)" value="NVDA" />
+              </label>
+            </div>
+            <div class="composer-actions">
+              <button id="on-demand-submit" class="primary-button" type="button">Run analysis</button>
+            </div>
+            <p id="on-demand-message" class="composer-message" aria-live="polite"></p>
+          </article>
+
+          <article class="panel jobs">
+            <div class="panel-head">
+              <p class="panel-kicker">Queue</p>
+              <h2>Recent jobs</h2>
+            </div>
+            <div id="jobs-list" class="jobs-list empty-state">No jobs yet.</div>
+          </article>
+        </div>
+      </section>
+
+      <section id="daily-coverage" class="tab-panel">
+        <div class="grid daily-grid">
+          <article class="panel composer">
+            <div class="panel-head">
+              <p class="panel-kicker">Daily Slate</p>
+              <h2>20-ticker coverage</h2>
+            </div>
+            <div class="shared-controls">
+              <label class="field">
+                <span class="field-label">Provider</span>
+                <select id="daily-provider-select">
+                  <option value="opencode">OpenCode</option>
+                </select>
+              </label>
+              <label class="field" id="daily-opencode-model-field">
+                <span class="field-label">Model / deployment</span>
+                <input
+                  id="daily-model-input"
                   type="text"
                   spellcheck="false"
-                  placeholder="Deep think model"
+                  placeholder="Model name or deployment"
                   value=""
+                />
+              </label>
+              <div id="daily-provider-model-fields" class="provider-model-fields hidden">
+                <label class="field">
+                  <span class="field-label">Quick think model</span>
+                  <input id="daily-quick-model-input" type="text" spellcheck="false" placeholder="Quick think model" value="" />
+                </label>
+                <label class="field">
+                  <span class="field-label">Deep think model</span>
+                  <input id="daily-deep-model-input" type="text" spellcheck="false" placeholder="Deep think model" value="" />
+                </label>
+              </div>
+              <label class="field">
+                <span class="field-label">Trade date</span>
+                <input
+                  id="daily-date"
+                  type="text"
+                  inputmode="numeric"
+                  spellcheck="false"
+                  placeholder="YYYY-MM-DD"
+                  value="{{ today }}"
                 />
               </label>
             </div>
-            <label class="field">
-              <span class="field-label">Date</span>
-              <input
-                id="shared-date"
-                class="shared-date-input"
-                type="text"
-                inputmode="numeric"
-                spellcheck="false"
-                placeholder="YYYY-MM-DD"
-                value="{{ today }}"
-              />
-            </label>
-          </div>
-          <div id="run-rows" class="run-rows"></div>
-          <div class="composer-actions">
-            <button id="add-row" class="icon-button" type="button" aria-label="Add symbol">Add symbol</button>
-            <button id="submit-runs" class="primary-button" type="button">Run analysis</button>
-          </div>
-          <p id="composer-message" class="composer-message" aria-live="polite"></p>
-        </article>
 
-        <article class="panel jobs">
-          <div class="panel-head">
-            <p class="panel-kicker">Queue</p>
-            <h2>Recent jobs</h2>
-          </div>
-          <div id="jobs-list" class="jobs-list empty-state">No jobs yet.</div>
-        </article>
+            <div class="daily-actions">
+              <button id="prepare-daily-run" class="icon-button" type="button">Prepare slate</button>
+              <button id="run-missing-daily" class="primary-button" type="button">Run missing tickers</button>
+            </div>
+            <p id="daily-message" class="composer-message" aria-live="polite"></p>
+
+            <section class="subpanel">
+              <div class="subpanel-head">
+                <p class="panel-kicker">Watchlist</p>
+                <h3>Hardcoded source</h3>
+              </div>
+              <div id="daily-watchlist" class="ticker-list empty-state">Loading watchlist...</div>
+            </section>
+
+            <section class="subpanel">
+              <div class="subpanel-head">
+                <p class="panel-kicker">Execution Policy</p>
+                <h3>Paper-trading mapping</h3>
+              </div>
+              <div id="daily-policy" class="policy-list empty-state">Loading policy...</div>
+            </section>
+          </article>
+
+          <article class="panel daily-status-panel">
+            <div class="panel-head">
+              <p class="panel-kicker">Coverage Status</p>
+              <h2>Manifest for <span id="daily-status-date">{{ today }}</span></h2>
+            </div>
+            <div id="daily-summary" class="summary-strip empty-state">Prepare a daily run to create the manifest.</div>
+            <div id="daily-status-table" class="daily-table-shell empty-state">No manifest prepared yet.</div>
+          </article>
+        </div>
       </section>
 
-      <section class="grid lower-grid">
-        <article class="panel browser">
-          <div class="panel-head">
-            <p class="panel-kicker">Reports</p>
-            <h2>Saved reports</h2>
-          </div>
-          <div class="browser-toolbar">
-            <select id="ticker-select">
-              <option value="">Ticker</option>
-            </select>
-            <select id="report-select">
-              <option value="">Trade date</option>
-            </select>
-          </div>
-          <div id="ticker-summary" class="ticker-summary empty-state">Choose a ticker to list saved JSON logs.</div>
-        </article>
+      <section id="saved-reports" class="tab-panel">
+        <div class="grid lower-grid">
+          <article class="panel browser">
+            <div class="panel-head">
+              <p class="panel-kicker">Reports</p>
+              <h2>Saved reports</h2>
+            </div>
+            <div class="browser-toolbar">
+              <select id="ticker-select">
+                <option value="">Ticker</option>
+              </select>
+              <select id="report-select">
+                <option value="">Trade date</option>
+              </select>
+            </div>
+            <div id="ticker-summary" class="ticker-summary empty-state">Choose a ticker to list saved JSON logs.</div>
+          </article>
 
-        <article class="panel report">
-          <div class="panel-head">
-            <p class="panel-kicker">Rendered</p>
-            <h2 id="report-title">No report selected</h2>
-          </div>
-          <div id="report-view" class="report-view empty-state">Select a ticker and report date to render the saved analysis.</div>
-        </article>
+          <article class="panel report">
+            <div class="panel-head">
+              <p class="panel-kicker">Rendered</p>
+              <h2 id="report-title">No report selected</h2>
+            </div>
+            <div id="report-view" class="report-view empty-state">Select a ticker and report date to render the saved analysis.</div>
+          </article>
+        </div>
       </section>
     </main>
     <script>

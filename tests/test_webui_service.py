@@ -153,3 +153,94 @@ def test_run_job_saves_complete_report(tmp_path, monkeypatch):
     assert saved_report.exists()
     assert (saved_report.parent / "1_analysts" / "market.md").exists()
     assert (saved_report.parent / "3_trading" / "trader.md").exists()
+
+
+def test_prepare_daily_run_builds_manifest(tmp_path, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
+    monkeypatch.setattr(service, "DEFAULT_DAILY_TICKERS", ("SPY", "NVDA", "AAPL"))
+
+    manifest = service.prepare_daily_run("2026-05-09")
+
+    manifest_path = reports_dir / service.DAILY_RUNS_DIRNAME / "2026-05-09.json"
+    assert manifest["trade_date"] == "2026-05-09"
+    assert manifest["summary"]["total"] == 3
+    assert manifest["summary"]["pending"] == 3
+    assert manifest_path.exists()
+
+
+def test_queue_daily_run_only_queues_incomplete_entries(tmp_path, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
+    monkeypatch.setattr(service, "DEFAULT_DAILY_TICKERS", ("SPY", "NVDA"))
+
+    log_dir = reports_dir / "SPY" / "TradingAgentsStrategy_logs"
+    log_dir.mkdir(parents=True)
+    (log_dir / "full_states_log_2026-05-09.json").write_text(
+        json.dumps({"final_trade_decision": "Rating: Buy", "trade_date": "2026-05-09"}),
+        encoding="utf-8",
+    )
+
+    class FakeJobManager:
+        def __init__(self):
+            self.calls = []
+
+        def submit(self, ticker, trade_date, workflow, provider, quick_model, deep_model):
+            self.calls.append((ticker, trade_date, workflow, provider, quick_model, deep_model))
+            return type("Job", (), {"job_id": f"job-{ticker.lower()}"})()
+
+    manager = FakeJobManager()
+    queued = service.queue_daily_run_entries(manager, "2026-05-09", provider="opencode")
+
+    assert len(manager.calls) == 1
+    assert manager.calls[0][0] == "NVDA"
+    assert queued["summary"]["completed"] == 1
+    assert queued["summary"]["queued"] == 1
+
+
+def test_run_job_updates_daily_manifest_with_rating(tmp_path, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
+    monkeypatch.setattr(service, "DEFAULT_DAILY_TICKERS", ("SPY",))
+
+    class FakeGraph:
+        def __init__(self, debug, config):
+            self.debug = debug
+            self.config = config
+
+        def propagate(self, ticker, trade_date):
+            return {
+                "company_of_interest": ticker,
+                "trade_date": trade_date,
+                "market_report": "# Market\n\nDetails",
+                "news_report": "# News\n\nContext",
+                "final_trade_decision": "Rating: Overweight\nHold with selective trimming.",
+            }, "Rating: Overweight\nHold with selective trimming."
+
+    monkeypatch.setattr(service, "TradingAgentsGraph", FakeGraph)
+
+    manager = service.TradingJobManager(max_workers=1)
+    service.prepare_daily_run("2026-05-09")
+    job = service.JobState(
+        job_id="job999",
+        ticker="SPY",
+        trade_date="2026-05-09",
+        workflow=service.WORKFLOW_DAILY_COVERAGE,
+        provider="opencode",
+        quick_model="opencode",
+        deep_model="opencode",
+    )
+    manager._jobs[job.job_id] = job
+    manager._order.insert(0, job.job_id)
+
+    manager._run_job(job.job_id)
+
+    daily_run = service.get_daily_run("2026-05-09")
+    entry = daily_run["tickers"][0]
+    assert job.status == "completed"
+    assert entry["status"] == "completed"
+    assert entry["rating"] == "Overweight"
+    assert entry["report_path"].endswith("complete_report.md")
