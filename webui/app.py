@@ -178,10 +178,10 @@ def get_ticker_reports(ticker: str) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.get("/api/tickers/{ticker}/reports/{trade_date}")
-def get_report(ticker: str, trade_date: str) -> dict:
+@app.get("/api/tickers/{ticker}/reports/{report_id}")
+def get_report(ticker: str, report_id: str) -> dict:
     try:
-        return load_report(ticker, trade_date)
+        return load_report(ticker, report_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Report not found") from exc
     except ValueError as exc:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -84,6 +85,37 @@ _SECTION_TITLES = {
     "investment_plan": "Research Team Decision",
     "trader_investment_decision": "Trader Plan",
     "final_trade_decision": "Portfolio Decision",
+}
+_SAVED_REPORT_ID_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}_[A-Za-z0-9._-]+$")
+_SAVED_REPORT_DOCUMENT_ORDER = {
+    "complete_report.md": 0,
+    "1_analysts/market.md": 10,
+    "1_analysts/sentiment.md": 11,
+    "1_analysts/news.md": 12,
+    "1_analysts/fundamentals.md": 13,
+    "2_research/bull.md": 20,
+    "2_research/bear.md": 21,
+    "2_research/manager.md": 22,
+    "3_trading/trader.md": 30,
+    "4_risk/aggressive.md": 40,
+    "4_risk/neutral.md": 41,
+    "4_risk/conservative.md": 42,
+    "5_portfolio/decision.md": 50,
+}
+_SAVED_REPORT_DOCUMENT_TITLES = {
+    "complete_report.md": "Complete Report",
+    "1_analysts/market.md": "Market Analyst",
+    "1_analysts/sentiment.md": "Social Analyst",
+    "1_analysts/news.md": "News Analyst",
+    "1_analysts/fundamentals.md": "Fundamentals Analyst",
+    "2_research/bull.md": "Bull Researcher",
+    "2_research/bear.md": "Bear Researcher",
+    "2_research/manager.md": "Research Manager",
+    "3_trading/trader.md": "Trader",
+    "4_risk/aggressive.md": "Aggressive Analyst",
+    "4_risk/neutral.md": "Neutral Analyst",
+    "4_risk/conservative.md": "Conservative Analyst",
+    "5_portfolio/decision.md": "Portfolio Manager Decision",
 }
 
 
@@ -390,6 +422,54 @@ def list_report_tickers() -> list[dict[str, Any]]:
 
 def list_report_runs(ticker: str) -> list[dict[str, Any]]:
     safe_ticker = safe_ticker_component(ticker)
+    saved_runs = _list_saved_report_runs(safe_ticker)
+    if saved_runs:
+        return saved_runs
+
+    return _list_legacy_report_runs(safe_ticker)
+
+
+def _list_saved_report_runs(safe_ticker: str) -> list[dict[str, Any]]:
+    saved_dir = REPORTS_DIR / safe_ticker / "SavedReports"
+    if not saved_dir.exists():
+        return []
+
+    runs: list[dict[str, Any]] = []
+    for path in sorted(
+        (candidate for candidate in saved_dir.iterdir() if candidate.is_dir()),
+        key=lambda candidate: (candidate.name, candidate.stat().st_mtime),
+        reverse=True,
+    ):
+        report_id = path.name
+        if not _SAVED_REPORT_ID_PATTERN.fullmatch(report_id):
+            continue
+
+        complete_report = path / "complete_report.md"
+        trade_date, _, report_hash = report_id.partition("_")
+        relative_dir = path.relative_to(REPO_ROOT)
+        document_count = sum(1 for _ in path.rglob("*.md"))
+        runs.append(
+            {
+                "ticker": safe_ticker,
+                "report_id": report_id,
+                "trade_date": trade_date,
+                "report_hash": report_hash or None,
+                "file_name": complete_report.name if complete_report.exists() else path.name,
+                "relative_path": str(relative_dir),
+                "report_path": (
+                    str(complete_report.relative_to(REPO_ROOT))
+                    if complete_report.exists()
+                    else None
+                ),
+                "updated_at": datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
+                "document_count": document_count,
+                "source": "saved_report",
+            }
+        )
+    return runs
+
+
+def _list_legacy_report_runs(safe_ticker: str) -> list[dict[str, Any]]:
     log_dir = REPORTS_DIR / safe_ticker / "TradingAgentsStrategy_logs"
     if not log_dir.exists():
         return []
@@ -401,16 +481,87 @@ def list_report_runs(ticker: str) -> list[dict[str, Any]]:
             {
                 "ticker": safe_ticker,
                 "trade_date": trade_date,
+                "report_id": trade_date,
                 "file_name": path.name,
                 "relative_path": str(path.relative_to(REPO_ROOT)),
                 "updated_at": datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
+                "document_count": 1,
+                "source": "legacy_log",
             }
         )
     return runs
 
 
-def load_report(ticker: str, trade_date: str) -> dict[str, Any]:
+def load_report(ticker: str, report_id: str) -> dict[str, Any]:
     safe_ticker = safe_ticker_component(ticker)
+    if _SAVED_REPORT_ID_PATTERN.fullmatch(report_id):
+        report_dir = REPORTS_DIR / safe_ticker / "SavedReports" / report_id
+        if report_dir.exists():
+            return _load_saved_report(safe_ticker, report_dir)
+
+    return _load_legacy_report(safe_ticker, report_id)
+
+
+def _load_saved_report(safe_ticker: str, report_dir: Path) -> dict[str, Any]:
+    report_id = report_dir.name
+    trade_date, _, report_hash = report_id.partition("_")
+    documents = []
+    for path in sorted(
+        report_dir.rglob("*.md"),
+        key=lambda candidate: (
+            _SAVED_REPORT_DOCUMENT_ORDER.get(
+                candidate.relative_to(report_dir).as_posix(),
+                999,
+            ),
+            candidate.relative_to(report_dir).as_posix(),
+        ),
+    ):
+        relative_path = path.relative_to(report_dir).as_posix()
+        markdown_text = path.read_text(encoding="utf-8")
+        documents.append(
+            {
+                "path": relative_path,
+                "title": _saved_report_document_title(relative_path),
+                "markdown": markdown_text,
+                "html": _markdown_to_html(markdown_text),
+                "kind": "saved_report_markdown",
+            }
+        )
+
+    if not documents:
+        raise FileNotFoundError(report_dir / "complete_report.md")
+
+    return {
+        "ticker": safe_ticker,
+        "trade_date": trade_date,
+        "report_id": report_id,
+        "report_hash": report_hash or None,
+        "company_of_interest": safe_ticker,
+        "source": "saved_report",
+        "relative_path": str(report_dir.relative_to(REPO_ROOT)),
+        "report_path": str((report_dir / "complete_report.md").relative_to(REPO_ROOT)),
+        "documents": documents,
+        "default_document": (
+            "complete_report.md"
+            if any(document["path"] == "complete_report.md" for document in documents)
+            else documents[0]["path"]
+        ),
+        "sections": [],
+        "debates": [],
+        "raw": None,
+    }
+
+
+def _saved_report_document_title(relative_path: str) -> str:
+    known_title = _SAVED_REPORT_DOCUMENT_TITLES.get(relative_path)
+    if known_title:
+        return known_title
+
+    path = Path(relative_path)
+    return path.stem.replace("_", " ").title()
+
+
+def _load_legacy_report(safe_ticker: str, trade_date: str) -> dict[str, Any]:
     log_path = (
         REPORTS_DIR
         / safe_ticker
@@ -469,10 +620,37 @@ def load_report(ticker: str, trade_date: str) -> dict[str, Any]:
                 }
             )
 
+    documents = [
+        {
+            "path": f"legacy/{section['key']}.md",
+            "title": section["title"],
+            "markdown": section["markdown"],
+            "html": section["html"],
+            "kind": "legacy_section",
+        }
+        for section in sections
+    ]
+    documents.extend(
+        {
+            "path": f"legacy/{section['group']}_{section['key']}.md",
+            "title": section["title"],
+            "markdown": section["markdown"],
+            "html": section["html"],
+            "kind": "legacy_debate",
+        }
+        for section in debate_sections
+    )
+
     return {
         "ticker": safe_ticker,
         "trade_date": payload.get("trade_date", trade_date),
+        "report_id": trade_date,
         "company_of_interest": payload.get("company_of_interest", safe_ticker),
+        "source": "legacy_log",
+        "relative_path": str(log_path.relative_to(REPO_ROOT)),
+        "report_path": str(log_path.relative_to(REPO_ROOT)),
+        "documents": documents,
+        "default_document": documents[0]["path"] if documents else None,
         "sections": sections,
         "debates": debate_sections,
         "raw": payload,

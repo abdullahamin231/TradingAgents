@@ -12,8 +12,8 @@ The interface:
 - lets you choose the LLM provider per batch run
 - uses the active OpenCode model from `opencode.json` when provider is OpenCode
 - lets you override the model/deployment name for OpenCode, or separate quick/deep models for other providers
-- lists and renders saved JSON logs from `reports/<ticker>/TradingAgentsStrategy_logs/`
-- saves a consolidated markdown export under `reports/<ticker>/SavedReports/`
+- browses saved markdown snapshots from `reports/<ticker>/SavedReports/<date>_<hash>/`
+- falls back to legacy JSON logs from `reports/<ticker>/TradingAgentsStrategy_logs/` when no saved snapshot exists
 
 If you want more or fewer concurrent runs, set:
 

@@ -262,6 +262,18 @@ button:hover {
   margin-top: 10px;
 }
 
+.browser-toolbar,
+.report-file-toolbar,
+.report-meta-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.browser-toolbar {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 10px;
+}
+
 .composer-message {
   min-height: 1rem;
   margin: 8px 0 0;
@@ -355,6 +367,10 @@ button:hover {
   color: var(--muted);
 }
 
+.report-browser-meta {
+  margin-bottom: 10px;
+}
+
 .ticker-list {
   display: flex;
   flex-wrap: wrap;
@@ -406,6 +422,17 @@ button:hover {
 
 .summary-card strong {
   font-size: 1.15rem;
+}
+
+.report-meta-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.report-path-value {
+  display: block;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  word-break: break-word;
 }
 
 .daily-table-shell {
@@ -508,13 +535,32 @@ button:hover {
   color: #f5d1a2;
 }
 
+.report-file-list {
+  margin-bottom: 10px;
+}
+
+.report-file-toolbar {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.report-file-button.active {
+  background: linear-gradient(135deg, rgba(240, 186, 104, 0.22), rgba(141, 198, 217, 0.16));
+  border-color: rgba(240, 186, 104, 0.3);
+}
+
+.report-document {
+  min-height: 220px;
+}
+
 @media (max-width: 1080px) {
   .grid,
   .daily-grid,
   .lower-grid,
   .shared-controls,
   .provider-model-fields,
-  .summary-strip {
+  .summary-strip,
+  .browser-toolbar,
+  .report-meta-grid {
     grid-template-columns: 1fr;
   }
 

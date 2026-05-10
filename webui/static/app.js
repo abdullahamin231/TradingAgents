@@ -5,6 +5,8 @@ const tickerSelect = document.querySelector("#ticker-select");
 const reportSelect = document.querySelector("#report-select");
 const tickerSummary = document.querySelector("#ticker-summary");
 const reportTitle = document.querySelector("#report-title");
+const reportMeta = document.querySelector("#report-meta");
+const reportFileList = document.querySelector("#report-file-list");
 const reportView = document.querySelector("#report-view");
 const dailyWatchlist = document.querySelector("#daily-watchlist");
 const dailyPolicy = document.querySelector("#daily-policy");
@@ -43,6 +45,7 @@ const providerGroups = {
 
 let providerOptions = [];
 let activeDailyTradeDate = window.TRADINGAGENTS_DEFAULT_DATE;
+let activeReportPayload = null;
 
 function setTab(target) {
   tabButtons.forEach((button) => button.classList.toggle("active", button.dataset.tabTarget === target));
@@ -69,6 +72,17 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function resetReportViewer() {
+  activeReportPayload = null;
+  reportTitle.textContent = "No report selected";
+  reportMeta.className = "report-browser-meta empty-state";
+  reportMeta.textContent = "Select a ticker and snapshot to inspect the markdown files inside that saved report.";
+  reportFileList.className = "report-file-list hidden";
+  reportFileList.innerHTML = "";
+  reportView.className = "report-view empty-state";
+  reportView.textContent = "Select a ticker and saved snapshot to render the report.";
 }
 
 function updateModelDefault(groupName, providerValue) {
@@ -398,6 +412,7 @@ async function retryDailyTicker(ticker) {
 }
 
 async function loadTickers() {
+  const previousTicker = tickerSelect.value;
   const response = await fetch("/api/tickers");
   const payload = await response.json();
   const tickers = payload.tickers || [];
@@ -413,6 +428,7 @@ async function loadTickers() {
   if (!tickers.length) {
     tickerSummary.className = "ticker-summary empty-state";
     tickerSummary.textContent = "No saved reports found in reports/.";
+    resetReportViewer();
     return;
   }
 
@@ -421,18 +437,24 @@ async function loadTickers() {
     <div class="ticker-list">
       ${tickers
         .map(
-          (ticker) => `<span class="report-chip">${escapeHtml(ticker.ticker)} · ${escapeHtml(ticker.report_count)} logs · latest ${escapeHtml(ticker.latest_trade_date || "n/a")}</span>`
+          (ticker) =>
+            `<span class="report-chip">${escapeHtml(ticker.ticker)} · ${escapeHtml(ticker.report_count)} snapshots · latest ${escapeHtml(
+              ticker.latest_trade_date || "n/a"
+            )}</span>`
         )
         .join("")}
     </div>
   `;
+
+  if (tickers.some((ticker) => ticker.ticker === previousTicker)) {
+    tickerSelect.value = previousTicker;
+  }
 }
 
 async function loadReportsForTicker(ticker) {
-  reportSelect.innerHTML = `<option value="">Trade date</option>`;
-  reportTitle.textContent = "No report selected";
-  reportView.className = "report-view empty-state";
-  reportView.textContent = "Select a ticker and report date to render the saved analysis.";
+  const previousReportId = reportSelect.value;
+  reportSelect.innerHTML = `<option value="">Saved snapshot</option>`;
+  resetReportViewer();
 
   if (!ticker) {
     return;
@@ -444,47 +466,120 @@ async function loadReportsForTicker(ticker) {
 
   reports.forEach((report) => {
     const option = document.createElement("option");
-    option.value = report.trade_date;
-    option.textContent = `${report.trade_date} · ${report.file_name}`;
+    option.value = report.report_id;
+    option.textContent =
+      report.source === "saved_report"
+        ? `${report.trade_date} · ${report.report_hash || report.report_id}`
+        : `${report.trade_date} · legacy log`;
     reportSelect.appendChild(option);
   });
+
+  if (reports.some((report) => report.report_id === previousReportId)) {
+    reportSelect.value = previousReportId;
+  }
 }
 
-async function loadReport(ticker, tradeDate) {
-  if (!ticker || !tradeDate) {
+function renderReportDocument(documentPath) {
+  if (!activeReportPayload) {
+    resetReportViewer();
     return;
   }
 
-  const response = await fetch(`/api/tickers/${encodeURIComponent(ticker)}/reports/${encodeURIComponent(tradeDate)}`);
-  const payload = await response.json();
+  const documents = activeReportPayload.documents || [];
+  const selectedDocument =
+    documents.find((document) => document.path === documentPath) ||
+    documents.find((document) => document.path === activeReportPayload.default_document) ||
+    documents[0];
 
-  reportTitle.textContent = `${payload.ticker} · ${payload.trade_date}`;
+  if (!selectedDocument) {
+    reportView.className = "report-view empty-state";
+    reportView.textContent = "No markdown files were found in this report snapshot.";
+    return;
+  }
+
+  reportFileList
+    .querySelectorAll("[data-document-path]")
+    .forEach((button) => button.classList.toggle("active", button.dataset.documentPath === selectedDocument.path));
+
   reportView.className = "report-view";
   reportView.innerHTML = `
     <div class="report-header">
-      <p class="report-meta">Company of interest: ${escapeHtml(payload.company_of_interest)}</p>
+      <p class="report-meta">Viewing <code>${escapeHtml(selectedDocument.path)}</code></p>
     </div>
-    ${payload.sections
-      .map(
-        (section) => `
-          <section class="section-card">
-            <h3>${escapeHtml(section.title)}</h3>
-            <div class="html">${section.html}</div>
-          </section>
-        `
-      )
-      .join("")}
-    ${payload.debates
-      .map(
-        (section) => `
-          <section class="debate-card">
-            <h3>${escapeHtml(section.title)}</h3>
-            <div class="html">${section.html}</div>
-          </section>
-        `
-      )
-      .join("")}
+    <section class="section-card report-document">
+      <h3>${escapeHtml(selectedDocument.title)}</h3>
+      <div class="html">${selectedDocument.html}</div>
+    </section>
   `;
+}
+
+async function loadReport(ticker, reportId) {
+  if (!ticker || !reportId) {
+    resetReportViewer();
+    return;
+  }
+
+  const response = await fetch(`/api/tickers/${encodeURIComponent(ticker)}/reports/${encodeURIComponent(reportId)}`);
+  const payload = await response.json();
+  if (!response.ok) {
+    resetReportViewer();
+    reportView.className = "report-view empty-state";
+    reportView.textContent = payload.detail || "Failed to load report.";
+    return;
+  }
+
+  activeReportPayload = payload;
+  reportTitle.textContent = `${payload.ticker} · ${payload.report_id || payload.trade_date}`;
+  reportMeta.className = "report-browser-meta";
+  reportMeta.innerHTML = `
+    <div class="report-meta-grid">
+      <div class="summary-card">
+        <span>Ticker</span>
+        <strong>${escapeHtml(payload.ticker)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>Trade Date</span>
+        <strong>${escapeHtml(payload.trade_date)}</strong>
+      </div>
+      <div class="summary-card">
+        <span>Source</span>
+        <strong>${escapeHtml(payload.source === "saved_report" ? "SavedReports" : "Legacy Log")}</strong>
+      </div>
+      <div class="summary-card">
+        <span>Path</span>
+        <strong class="report-path-value">${escapeHtml(payload.relative_path || payload.report_path || "n/a")}</strong>
+      </div>
+    </div>
+  `;
+
+  const documents = payload.documents || [];
+  if (!documents.length) {
+    reportFileList.className = "report-file-list hidden";
+    reportView.className = "report-view empty-state";
+    reportView.textContent = "No markdown files were found in this report snapshot.";
+    return;
+  }
+
+  reportFileList.className = "report-file-list";
+  reportFileList.innerHTML = `
+    <div class="report-file-toolbar">
+      ${documents
+        .map(
+          (document) => `
+            <button
+              class="mini-button report-file-button"
+              type="button"
+              data-document-path="${escapeHtml(document.path)}"
+            >
+              ${escapeHtml(document.title)}
+            </button>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+
+  renderReportDocument(payload.default_document || documents[0].path);
 }
 
 tabButtons.forEach((button) => {
@@ -513,6 +608,13 @@ dailyStatusTable.addEventListener("click", (event) => {
 });
 tickerSelect.addEventListener("change", (event) => loadReportsForTicker(event.target.value));
 reportSelect.addEventListener("change", () => loadReport(tickerSelect.value, reportSelect.value));
+reportFileList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-document-path]");
+  if (!button) {
+    return;
+  }
+  renderReportDocument(button.dataset.documentPath);
+});
 
 loadProviders();
 fetchJobs();

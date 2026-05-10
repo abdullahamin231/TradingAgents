@@ -87,10 +87,44 @@ def test_list_and_load_report(tmp_path, monkeypatch):
     loaded = service.load_report("SPY", "2026-05-05")
 
     assert reports[0]["trade_date"] == "2026-05-05"
+    assert reports[0]["report_id"] == "2026-05-05"
     assert loaded["ticker"] == "SPY"
+    assert loaded["source"] == "legacy_log"
     assert any(section["title"] == "Market Analysis" for section in loaded["sections"])
     assert any(section["html"] for section in loaded["sections"])
     assert any(section["title"] == "Portfolio Manager" for section in loaded["debates"])
+    assert loaded["documents"]
+
+
+def test_list_and_load_saved_report_snapshot(tmp_path, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    report_dir = reports_dir / "SPY" / "SavedReports" / "2026-05-05_deadbeef"
+    (report_dir / "1_analysts").mkdir(parents=True)
+    (report_dir / "4_risk").mkdir(parents=True)
+    (report_dir / "complete_report.md").write_text("# Complete\n\nSummary", encoding="utf-8")
+    (report_dir / "1_analysts" / "market.md").write_text("## Market\n\nTrend up", encoding="utf-8")
+    (report_dir / "4_risk" / "aggressive.md").write_text("## Aggressive\n\nTake risk", encoding="utf-8")
+
+    monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
+
+    reports = service.list_report_runs("SPY")
+    loaded = service.load_report("SPY", "2026-05-05_deadbeef")
+
+    assert reports[0]["report_id"] == "2026-05-05_deadbeef"
+    assert reports[0]["source"] == "saved_report"
+    assert reports[0]["document_count"] == 3
+    assert loaded["ticker"] == "SPY"
+    assert loaded["trade_date"] == "2026-05-05"
+    assert loaded["report_hash"] == "deadbeef"
+    assert loaded["source"] == "saved_report"
+    assert loaded["default_document"] == "complete_report.md"
+    assert [document["path"] for document in loaded["documents"]] == [
+        "complete_report.md",
+        "1_analysts/market.md",
+        "4_risk/aggressive.md",
+    ]
+    assert loaded["documents"][0]["html"]
 
 
 def test_run_job_saves_complete_report(tmp_path, monkeypatch):

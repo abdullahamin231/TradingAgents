@@ -191,10 +191,10 @@
                 <option value="">Ticker</option>
               </select>
               <select id="report-select">
-                <option value="">Trade date</option>
+                <option value="">Saved snapshot</option>
               </select>
             </div>
-            <div id="ticker-summary" class="ticker-summary empty-state">Choose a ticker to list saved JSON logs.</div>
+            <div id="ticker-summary" class="ticker-summary empty-state">Choose a ticker to list folders under <code>reports/&lt;ticker&gt;/SavedReports/</code>.</div>
           </article>
 
           <article class="panel report">
@@ -202,6 +202,8 @@
               <p class="panel-kicker">Rendered</p>
               <h2 id="report-title">No report selected</h2>
             </div>
+            <div id="report-meta" class="report-browser-meta empty-state">Select a ticker and snapshot to inspect the markdown files inside that saved report.</div>
+            <div id="report-file-list" class="report-file-list hidden"></div>
             <div id="report-view" class="report-view empty-state">Select a ticker and report date to render the saved analysis.</div>
           </article>
         </div>
