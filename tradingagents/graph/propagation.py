@@ -6,6 +6,7 @@ from tradingagents.agents.utils.agent_states import (
     InvestDebateState,
     RiskDebateState,
 )
+from tradingagents.agents.utils.source_tracking import begin_run
 
 
 class Propagator:
@@ -19,6 +20,7 @@ class Propagator:
         self, company_name: str, trade_date: str, past_context: str = ""
     ) -> Dict[str, Any]:
         """Create the initial state for the agent graph."""
+        begin_run()
         return {
             "messages": [("human", company_name)],
             "company_of_interest": company_name,
@@ -52,6 +54,10 @@ class Propagator:
             "fundamentals_report": "",
             "sentiment_report": "",
             "news_report": "",
+            "market_sources": [],
+            "sentiment_sources": [],
+            "news_sources": [],
+            "fundamentals_sources": [],
         }
 
     def get_graph_args(self, callbacks: Optional[List] = None) -> Dict[str, Any]:

@@ -18,6 +18,11 @@ from tradingagents.agents.utils.news_data_tools import (
     get_insider_transactions,
     get_global_news
 )
+from tradingagents.agents.utils.source_tracking import (
+    begin_run,
+    consume_sources,
+    extract_sources_from_messages,
+)
 
 
 def get_language_instruction() -> str:
@@ -42,10 +47,23 @@ def build_instrument_context(ticker: str) -> str:
         "preserving any exchange suffix (e.g. `.TO`, `.L`, `.HK`, `.T`)."
     )
 
-def create_msg_delete():
+_SOURCE_FIELD_BY_ANALYST = {
+    "market": "market_sources",
+    "social": "sentiment_sources",
+    "news": "news_sources",
+    "fundamentals": "fundamentals_sources",
+}
+
+
+def create_msg_delete(analyst_type: str):
     def delete_messages(state):
         """Clear messages and add placeholder for Anthropic compatibility"""
         messages = state["messages"]
+        source_field = _SOURCE_FIELD_BY_ANALYST.get(analyst_type)
+        sources = consume_sources(analyst_type) if source_field else []
+        if source_field and not sources:
+            sources = extract_sources_from_messages(messages, analyst_type)
+            consume_sources("unassigned")
 
         # Remove all messages
         removal_operations = [RemoveMessage(id=m.id) for m in messages]
@@ -53,9 +71,17 @@ def create_msg_delete():
         # Add a minimal placeholder message
         placeholder = HumanMessage(content="Continue")
 
-        return {"messages": removal_operations + [placeholder]}
+        result = {"messages": removal_operations + [placeholder]}
+        if source_field:
+            result[source_field] = sources
+        return result
 
     return delete_messages
+
+
+def begin_source_tracking():
+    """Reset the source log for a fresh analysis run."""
+    begin_run()
 
 
         

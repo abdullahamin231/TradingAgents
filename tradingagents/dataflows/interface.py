@@ -23,6 +23,7 @@ from .alpha_vantage import (
     get_global_news as get_alpha_vantage_global_news,
 )
 from .alpha_vantage_common import AlphaVantageRateLimitError
+from tradingagents.agents.utils.source_tracking import record_tool_source
 
 # Configuration and routing logic
 from .config import get_config
@@ -155,8 +156,47 @@ def route_to_vendor(method: str, *args, **kwargs):
         impl_func = vendor_impl[0] if isinstance(vendor_impl, list) else vendor_impl
 
         try:
-            return impl_func(*args, **kwargs)
+            result = impl_func(*args, **kwargs)
+            record_tool_source(
+                method,
+                _build_tool_args(method, *args, **kwargs),
+                result,
+                vendor=vendor,
+            )
+            return result
         except AlphaVantageRateLimitError:
             continue  # Only rate limits trigger fallback
 
     raise RuntimeError(f"No available vendor for '{method}'")
+
+
+def _build_tool_args(method: str, *args, **kwargs) -> dict:
+    """Map positional args to named tool arguments for source auditing."""
+    if method == "get_stock_data":
+        return {"symbol": args[0], "start_date": args[1], "end_date": args[2]}
+    if method == "get_indicators":
+        return {
+            "symbol": args[0],
+            "indicator": args[1],
+            "curr_date": args[2],
+            "look_back_days": args[3] if len(args) > 3 else kwargs.get("look_back_days", 30),
+        }
+    if method == "get_fundamentals":
+        return {"ticker": args[0], "curr_date": args[1] if len(args) > 1 else kwargs.get("curr_date")}
+    if method in {"get_balance_sheet", "get_cashflow", "get_income_statement"}:
+        return {
+            "ticker": args[0],
+            "freq": args[1] if len(args) > 1 else kwargs.get("freq", "quarterly"),
+            "curr_date": args[2] if len(args) > 2 else kwargs.get("curr_date"),
+        }
+    if method == "get_news":
+        return {"ticker": args[0], "start_date": args[1], "end_date": args[2]}
+    if method == "get_global_news":
+        return {
+            "curr_date": args[0],
+            "look_back_days": args[1] if len(args) > 1 else kwargs.get("look_back_days", 7),
+            "limit": args[2] if len(args) > 2 else kwargs.get("limit", 50),
+        }
+    if method == "get_insider_transactions":
+        return {"ticker": args[0]}
+    return dict(kwargs)

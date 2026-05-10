@@ -5,6 +5,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_language_instruction,
     get_stock_data,
 )
+from tradingagents.agents.utils.source_tracking import set_current_analyst
 from tradingagents.dataflows.config import get_config
 
 
@@ -72,6 +73,7 @@ Volume-Based Indicators:
         prompt = prompt.partial(instrument_context=instrument_context)
 
         chain = prompt | llm.bind_tools(tools)
+        set_current_analyst("market")
 
         result = chain.invoke(state["messages"])
 

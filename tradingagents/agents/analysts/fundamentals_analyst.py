@@ -8,6 +8,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_insider_transactions,
     get_language_instruction,
 )
+from tradingagents.agents.utils.source_tracking import set_current_analyst
 from tradingagents.dataflows.config import get_config
 
 
@@ -53,6 +54,7 @@ def create_fundamentals_analyst(llm):
         prompt = prompt.partial(instrument_context=instrument_context)
 
         chain = prompt | llm.bind_tools(tools)
+        set_current_analyst("fundamentals")
 
         result = chain.invoke(state["messages"])
 

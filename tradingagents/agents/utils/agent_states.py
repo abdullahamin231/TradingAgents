@@ -1,4 +1,5 @@
 from typing import Annotated
+from typing import Any
 from typing_extensions import TypedDict
 from langgraph.graph import MessagesState
 
@@ -56,6 +57,10 @@ class AgentState(MessagesState):
         str, "Report from the News Researcher of current world affairs"
     ]
     fundamentals_report: Annotated[str, "Report from the Fundamentals Researcher"]
+    market_sources: Annotated[list[dict[str, Any]], "Source trail for market analysis"]
+    sentiment_sources: Annotated[list[dict[str, Any]], "Source trail for social analysis"]
+    news_sources: Annotated[list[dict[str, Any]], "Source trail for news analysis"]
+    fundamentals_sources: Annotated[list[dict[str, Any]], "Source trail for fundamentals analysis"]
 
     # researcher team discussion step
     investment_debate_state: Annotated[

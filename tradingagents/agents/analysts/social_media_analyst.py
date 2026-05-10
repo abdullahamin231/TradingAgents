@@ -1,5 +1,6 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from tradingagents.agents.utils.agent_utils import build_instrument_context, get_language_instruction, get_news
+from tradingagents.agents.utils.source_tracking import set_current_analyst
 from tradingagents.dataflows.config import get_config
 
 
@@ -41,6 +42,7 @@ def create_social_media_analyst(llm):
         prompt = prompt.partial(instrument_context=instrument_context)
 
         chain = prompt | llm.bind_tools(tools)
+        set_current_analyst("social")
 
         result = chain.invoke(state["messages"])
 

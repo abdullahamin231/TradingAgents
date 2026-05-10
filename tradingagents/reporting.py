@@ -4,6 +4,16 @@ import datetime
 from pathlib import Path
 from typing import Any
 
+from tradingagents.agents.utils.source_tracking import format_sources_markdown
+
+
+_ANALYST_SOURCE_FILES = (
+    ("market_sources", "1_analysts/market_sources.md", "Market Analyst", "Market Analyst Sources"),
+    ("sentiment_sources", "1_analysts/sentiment_sources.md", "Social Analyst", "Social Analyst Sources"),
+    ("news_sources", "1_analysts/news_sources.md", "News Analyst", "News Analyst Sources"),
+    ("fundamentals_sources", "1_analysts/fundamentals_sources.md", "Fundamentals Analyst", "Fundamentals Analyst Sources"),
+)
+
 
 def save_complete_report(final_state: dict[str, Any], ticker: str, save_path: Path) -> Path:
     """Save the consolidated markdown report and its component sections."""
@@ -32,6 +42,19 @@ def save_complete_report(final_state: dict[str, Any], ticker: str, save_path: Pa
     if analyst_parts:
         content = "\n\n".join(f"### {name}\n{text}" for name, text in analyst_parts)
         sections.append(f"## I. Analyst Team Reports\n\n{content}")
+
+    source_links: list[str] = []
+    for field_name, file_name, analyst_title, source_title in _ANALYST_SOURCE_FILES:
+        sources = final_state.get(field_name) or []
+        if not sources:
+            continue
+        analysts_dir.mkdir(exist_ok=True)
+        source_markdown = format_sources_markdown(analyst_title, sources)
+        (analysts_dir / Path(file_name).name).write_text(source_markdown, encoding="utf-8")
+        source_links.append(f"- {source_title}: [{file_name}]({file_name})")
+
+    if source_links:
+        sections.append("## I.a Analyst Source Index\n\n" + "\n".join(source_links))
 
     # 2. Research
     if final_state.get("investment_debate_state"):
