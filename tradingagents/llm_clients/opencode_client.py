@@ -205,8 +205,12 @@ class OpenCodeClient(BaseLLMClient):
         return RunnableLambda(_invoke_structured)
 
     def _run_binary(self, prompt: str) -> str:
+        command = [*_DEFAULT_OPENCODE_COMMAND]
+        if self.model:
+            command.extend(["--model", self.model])
+        command.append(prompt)
         completed = subprocess.run(
-            [*_DEFAULT_OPENCODE_COMMAND, prompt],
+            command,
             capture_output=True,
             text=True,
             check=True,

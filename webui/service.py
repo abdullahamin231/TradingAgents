@@ -279,23 +279,32 @@ def _is_markdown_table_header(line: str, next_line: str | None) -> bool:
     return bool(re.match(r"^\s*\|?(?:\s*:?-{3,}:?\s*\|)+(?:\s*:?-{3,}:?\s*)\|?\s*$", next_line))
 
 
-def _load_opencode_model() -> str | None:
+def _load_opencode_models() -> tuple[str | None, str | None]:
     if not OPENCODE_CONFIG_PATH.exists():
-        return None
+        return None, None
 
     try:
         payload = json.loads(OPENCODE_CONFIG_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return None
+        return None, None
 
-    model = payload.get("model")
-    return model if isinstance(model, str) and model.strip() else None
+    shared_model = payload.get("model")
+    quick_model = payload.get("quick_model")
+    deep_model = payload.get("deep_model")
+
+    resolved_shared = shared_model.strip() if isinstance(shared_model, str) and shared_model.strip() else None
+    resolved_quick = quick_model.strip() if isinstance(quick_model, str) and quick_model.strip() else resolved_shared
+    resolved_deep = deep_model.strip() if isinstance(deep_model, str) and deep_model.strip() else resolved_shared
+    return resolved_quick, resolved_deep
 
 
 def get_provider_default_model(provider: str, mode: str = "deep") -> str:
     provider_lower = provider.lower()
     if provider_lower == "opencode":
-        return _load_opencode_model() or "opencode"
+        quick_model, deep_model = _load_opencode_models()
+        if mode == "quick":
+            return quick_model or deep_model or "opencode"
+        return deep_model or quick_model or "opencode"
 
     default_model_factory = _PROVIDER_DEFAULT_MODELS.get(provider_lower)
     if default_model_factory is not None:
@@ -322,15 +331,6 @@ def build_run_config(
         if isinstance(deep_model, str) and deep_model.strip()
         else get_provider_default_model(provider_lower, "deep")
     )
-
-    if provider_lower == "opencode":
-        resolved_quick_model = resolved_deep_model = (
-            deep_model.strip()
-            if isinstance(deep_model, str) and deep_model.strip()
-            else quick_model.strip()
-            if isinstance(quick_model, str) and quick_model.strip()
-            else get_provider_default_model(provider_lower, "deep")
-        )
 
     config["llm_provider"] = provider_lower
     config["deep_think_llm"] = resolved_deep_model
@@ -421,14 +421,6 @@ class TradingJobManager:
             else get_provider_default_model(provider_lower, "deep")
         )
 
-        if provider_lower == "opencode":
-            resolved_quick_model = resolved_deep_model = (
-                deep_model.strip()
-                if isinstance(deep_model, str) and deep_model.strip()
-                else quick_model.strip()
-                if isinstance(quick_model, str) and quick_model.strip()
-                else get_provider_default_model(provider_lower, "deep")
-            )
         job = JobState(
             job_id=uuid.uuid4().hex,
             ticker=safe_ticker,

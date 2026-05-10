@@ -22,6 +22,28 @@ def test_build_opencode_config_uses_opencode_json(tmp_path, monkeypatch):
     assert Path(config["results_dir"]) == tmp_path / "reports"
 
 
+def test_build_opencode_config_supports_distinct_quick_and_deep_models(tmp_path, monkeypatch):
+    opencode_path = tmp_path / "opencode.json"
+    opencode_path.write_text(
+        json.dumps(
+            {
+                "quick_model": "opencode/quick-test-model",
+                "deep_model": "opencode/deep-test-model",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(service, "OPENCODE_CONFIG_PATH", opencode_path)
+    monkeypatch.setattr(service, "REPORTS_DIR", tmp_path / "reports")
+
+    config = service.build_opencode_config()
+
+    assert config["llm_provider"] == "opencode"
+    assert config["quick_think_llm"] == "opencode/quick-test-model"
+    assert config["deep_think_llm"] == "opencode/deep-test-model"
+
+
 def test_build_run_config_supports_google_provider(tmp_path, monkeypatch):
     monkeypatch.setattr(service, "REPORTS_DIR", tmp_path / "reports")
 
@@ -35,6 +57,20 @@ def test_build_run_config_supports_google_provider(tmp_path, monkeypatch):
     assert config["quick_think_llm"] == "gemini-3.1-flash-preview"
     assert config["deep_think_llm"] == "gemini-3.1-pro-preview"
     assert config["backend_url"] is None
+
+
+def test_build_run_config_supports_distinct_opencode_overrides(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "REPORTS_DIR", tmp_path / "reports")
+
+    config = service.build_run_config(
+        "opencode",
+        "opencode/quick-override",
+        "opencode/deep-override",
+    )
+
+    assert config["llm_provider"] == "opencode"
+    assert config["quick_think_llm"] == "opencode/quick-override"
+    assert config["deep_think_llm"] == "opencode/deep-override"
 
 
 def test_list_llm_providers_includes_opencode_and_google():
@@ -251,6 +287,8 @@ def test_queue_daily_run_only_queues_incomplete_entries(tmp_path, monkeypatch):
 
     assert len(manager.calls) == 1
     assert manager.calls[0][0] == "NVDA"
+    assert manager.calls[0][4] is None
+    assert manager.calls[0][5] is None
     assert queued["summary"]["completed"] == 1
     assert queued["summary"]["queued"] == 1
 

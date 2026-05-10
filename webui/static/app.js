@@ -27,17 +27,13 @@ const dailyMessage = document.querySelector("#daily-message");
 const providerGroups = {
   "on-demand": {
     select: document.querySelector("#on-demand-provider-select"),
-    opencodeField: document.querySelector("#on-demand-opencode-model-field"),
     providerFields: document.querySelector("#on-demand-provider-model-fields"),
-    modelInput: document.querySelector("#on-demand-model-input"),
     quickInput: document.querySelector("#on-demand-quick-model-input"),
     deepInput: document.querySelector("#on-demand-deep-model-input"),
   },
   daily: {
     select: document.querySelector("#daily-provider-select"),
-    opencodeField: document.querySelector("#daily-opencode-model-field"),
     providerFields: document.querySelector("#daily-provider-model-fields"),
-    modelInput: document.querySelector("#daily-model-input"),
     quickInput: document.querySelector("#daily-quick-model-input"),
     deepInput: document.querySelector("#daily-deep-model-input"),
   },
@@ -92,16 +88,7 @@ function updateModelDefault(groupName, providerValue) {
     return;
   }
 
-  const isOpenCode = providerValue === "opencode";
-  group.opencodeField.classList.toggle("hidden", !isOpenCode);
-  group.providerFields.classList.toggle("hidden", isOpenCode);
-
-  if (isOpenCode) {
-    group.modelInput.value = provider.default_deep_model || provider.default_quick_model || "";
-    group.modelInput.placeholder = provider.note || "Model name or deployment";
-    return;
-  }
-
+  group.providerFields.classList.remove("hidden");
   group.quickInput.value = provider.default_quick_model || "";
   group.deepInput.value = provider.default_deep_model || "";
   group.quickInput.placeholder = provider.note || "Quick think model";
@@ -123,9 +110,9 @@ function providerPayload(groupName) {
   const provider = group.select.value;
   return {
     provider,
-    model: provider === "opencode" ? group.modelInput.value.trim() : null,
-    quick_model: provider === "opencode" ? null : group.quickInput.value.trim(),
-    deep_model: provider === "opencode" ? null : group.deepInput.value.trim(),
+    model: null,
+    quick_model: group.quickInput.value.trim(),
+    deep_model: group.deepInput.value.trim(),
   };
 }
 
@@ -147,13 +134,7 @@ function renderJobs(jobs) {
           </div>
           <div class="job-line">Workflow: ${escapeHtml(job.workflow || "analysis_on_demand")} · Job ${escapeHtml(job.job_id.slice(0, 8))}</div>
           <div class="job-line">Provider: ${escapeHtml(job.provider || "opencode")}</div>
-          <div class="job-line">
-            ${
-              job.provider === "opencode"
-                ? `Model: ${escapeHtml(job.deep_model || job.quick_model || "default")}`
-                : `Quick: ${escapeHtml(job.quick_model || "default")} · Deep: ${escapeHtml(job.deep_model || "default")}`
-            }
-          </div>
+          <div class="job-line">Quick: ${escapeHtml(job.quick_model || "default")} · Deep: ${escapeHtml(job.deep_model || "default")}</div>
           ${job.report_path ? `<div class="job-line">Report: <code>${escapeHtml(job.report_path)}</code></div>` : ""}
           <div>${escapeHtml(job.decision || job.error || "Waiting for completion...")}</div>
         </article>

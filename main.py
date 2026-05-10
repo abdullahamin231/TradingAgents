@@ -9,8 +9,8 @@ load_dotenv()
 # Create a custom config
 config = DEFAULT_CONFIG.copy()
 config["llm_provider"] = "opencode"
-config["deep_think_llm"] = "opencode"  # Model name is ignored by the local wrapper
-config["quick_think_llm"] = "opencode"  # Model name is ignored by the local wrapper
+config["deep_think_llm"] = "opencode/minimax-m2.5-free"
+config["quick_think_llm"] = "opencode/minimax-m2.5-free"
 config["max_debate_rounds"] = 1  # Increase debate rounds
 
 # Configure data vendors (default uses yfinance, no extra API keys needed)

@@ -40,7 +40,7 @@ class TestOpenCodeClient:
 
         assert isinstance(result, AIMessage)
         assert result.content == "binary output"
-        assert mock_run.call_args.args[0] == ["opencode", "run", "Prompt text"]
+        assert mock_run.call_args.args[0] == ["opencode", "run", "--model", "any-model", "Prompt text"]
 
     @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
     def test_with_structured_output_parses_json(self, mock_run):
@@ -170,14 +170,15 @@ class TestOpenCodeProviderIntegration:
 
         assert isinstance(client, OpenCodeClient)
         assert client.get_llm() is client
+        assert client.model == "local-binary"
 
     def test_trading_graph_accepts_opencode_provider_config(self, tmp_path):
         config = dict(DEFAULT_CONFIG)
         config.update(
             {
                 "llm_provider": "opencode",
-                "deep_think_llm": "local-binary",
-                "quick_think_llm": "local-binary",
+                "deep_think_llm": "local-deep-binary",
+                "quick_think_llm": "local-quick-binary",
                 "data_cache_dir": str(tmp_path / "cache"),
                 "results_dir": str(tmp_path / "reports"),
                 "memory_log_path": str(tmp_path / "memory" / "log.md"),
@@ -188,3 +189,5 @@ class TestOpenCodeProviderIntegration:
 
         assert isinstance(graph.deep_thinking_llm, OpenCodeClient)
         assert isinstance(graph.quick_thinking_llm, OpenCodeClient)
+        assert graph.deep_thinking_llm.model == "local-deep-binary"
+        assert graph.quick_thinking_llm.model == "local-quick-binary"
