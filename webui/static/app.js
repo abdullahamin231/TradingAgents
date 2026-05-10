@@ -54,7 +54,7 @@ function setTab(target) {
 
 function setMessage(node, message = "", isError = false) {
   node.textContent = message;
-  node.style.color = isError ? "var(--danger)" : "var(--muted)";
+  node.style.color = isError ? "var(--text)" : "var(--muted)";
 }
 
 function isValidTradeDate(value) {
@@ -140,20 +140,22 @@ function renderJobs(jobs) {
   jobsList.innerHTML = jobs
     .map(
       (job) => `
-        <article class="job-card">
-          <div class="job-top">
+        <article class="job-entry">
+          <div class="job-head">
             <strong>${escapeHtml(job.ticker)} / ${escapeHtml(job.trade_date)}</strong>
             <span class="${statusClass(job.status)}">${escapeHtml(job.status)}</span>
           </div>
-          <p class="job-meta">Workflow: ${escapeHtml(job.workflow || "analysis_on_demand")} · Job ${escapeHtml(job.job_id.slice(0, 8))}</p>
-          <p class="job-meta">Provider: ${escapeHtml(job.provider || "opencode")}</p>
-          ${
-            job.provider === "opencode"
-              ? `<p class="job-meta">Model: ${escapeHtml(job.deep_model || job.quick_model || "default")}</p>`
-              : `<p class="job-meta">Quick: ${escapeHtml(job.quick_model || "default")} · Deep: ${escapeHtml(job.deep_model || "default")}</p>`
-          }
-          ${job.report_path ? `<p class="job-meta">Full report: ${escapeHtml(job.report_path)}</p>` : ""}
-          <p>${escapeHtml(job.decision || job.error || "Waiting for completion...")}</p>
+          <div class="job-line">Workflow: ${escapeHtml(job.workflow || "analysis_on_demand")} · Job ${escapeHtml(job.job_id.slice(0, 8))}</div>
+          <div class="job-line">Provider: ${escapeHtml(job.provider || "opencode")}</div>
+          <div class="job-line">
+            ${
+              job.provider === "opencode"
+                ? `Model: ${escapeHtml(job.deep_model || job.quick_model || "default")}`
+                : `Quick: ${escapeHtml(job.quick_model || "default")} · Deep: ${escapeHtml(job.deep_model || "default")}`
+            }
+          </div>
+          ${job.report_path ? `<div class="job-line">Report: <code>${escapeHtml(job.report_path)}</code></div>` : ""}
+          <div>${escapeHtml(job.decision || job.error || "Waiting for completion...")}</div>
         </article>
       `
     )
@@ -220,7 +222,7 @@ function renderDailyWatchlist(payload) {
 
   dailyWatchlist.className = tickers.length ? "ticker-list" : "ticker-list empty-state";
   dailyWatchlist.innerHTML = tickers.length
-    ? tickers.map((ticker) => `<span class="report-chip">${escapeHtml(ticker)}</span>`).join("")
+    ? tickers.map((ticker) => `<span class="ticker-chip">${escapeHtml(ticker)}</span>`).join("")
     : "No watchlist configured.";
 
   dailyPolicy.className = policy.length ? "policy-list" : "policy-list empty-state";
@@ -228,7 +230,7 @@ function renderDailyWatchlist(payload) {
     ? policy
         .map(
           (item) => `
-            <article class="policy-card">
+            <article class="policy-item">
               <strong>${escapeHtml(item.rating)}</strong>
               <p>${escapeHtml(item.action)}</p>
             </article>
@@ -258,8 +260,8 @@ function renderDailySummary(summary = null) {
   dailySummary.innerHTML = items
     .map(
       ([label, value]) => `
-        <div class="summary-card">
-          <span>${escapeHtml(label)}</span>
+        <div class="summary-item">
+          <span class="table-label">${escapeHtml(label)}</span>
           <strong>${escapeHtml(value)}</strong>
         </div>
       `
@@ -305,10 +307,10 @@ function renderDailyManifest(payload) {
                 <td>
                   ${
                     entry.status === "failed"
-                      ? `<button class="mini-button" type="button" data-retry-ticker="${escapeHtml(entry.ticker)}">Retry</button>`
+                      ? `<button type="button" data-retry-ticker="${escapeHtml(entry.ticker)}">Retry</button>`
                       : entry.status === "completed"
-                      ? "Complete"
-                      : "Waiting"
+                        ? "Complete"
+                        : "Waiting"
                   }
                 </td>
               </tr>
@@ -438,7 +440,7 @@ async function loadTickers() {
       ${tickers
         .map(
           (ticker) =>
-            `<span class="report-chip">${escapeHtml(ticker.ticker)} · ${escapeHtml(ticker.report_count)} snapshots · latest ${escapeHtml(
+            `<span class="ticker-chip">${escapeHtml(ticker.ticker)} · ${escapeHtml(ticker.report_count)} snapshots · latest ${escapeHtml(
               ticker.latest_trade_date || "n/a"
             )}</span>`
         )
@@ -503,13 +505,11 @@ function renderReportDocument(documentPath) {
 
   reportView.className = "report-view";
   reportView.innerHTML = `
-    <div class="report-header">
-      <p class="report-meta">Viewing <code>${escapeHtml(selectedDocument.path)}</code></p>
-    </div>
-    <section class="section-card report-document">
-      <h3>${escapeHtml(selectedDocument.title)}</h3>
+    <article class="markdown-document">
+      <p class="message">Viewing <code>${escapeHtml(selectedDocument.path)}</code></p>
+      <h1>${escapeHtml(selectedDocument.title)}</h1>
       <div class="html">${selectedDocument.html}</div>
-    </section>
+    </article>
   `;
 }
 
@@ -533,20 +533,20 @@ async function loadReport(ticker, reportId) {
   reportMeta.className = "report-browser-meta";
   reportMeta.innerHTML = `
     <div class="report-meta-grid">
-      <div class="summary-card">
-        <span>Ticker</span>
+      <div class="report-meta-item">
+        <span class="report-meta-label">Ticker</span>
         <strong>${escapeHtml(payload.ticker)}</strong>
       </div>
-      <div class="summary-card">
-        <span>Trade Date</span>
+      <div class="report-meta-item">
+        <span class="report-meta-label">Trade Date</span>
         <strong>${escapeHtml(payload.trade_date)}</strong>
       </div>
-      <div class="summary-card">
-        <span>Source</span>
+      <div class="report-meta-item">
+        <span class="report-meta-label">Source</span>
         <strong>${escapeHtml(payload.source === "saved_report" ? "SavedReports" : "Legacy Log")}</strong>
       </div>
-      <div class="summary-card">
-        <span>Path</span>
+      <div class="report-meta-item">
+        <span class="report-meta-label">Path</span>
         <strong class="report-path-value">${escapeHtml(payload.relative_path || payload.report_path || "n/a")}</strong>
       </div>
     </div>
@@ -567,7 +567,7 @@ async function loadReport(ticker, reportId) {
         .map(
           (document) => `
             <button
-              class="mini-button report-file-button"
+              class="report-file-button"
               type="button"
               data-document-path="${escapeHtml(document.path)}"
             >
