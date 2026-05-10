@@ -101,8 +101,15 @@ def test_list_and_load_saved_report_snapshot(tmp_path, monkeypatch):
     report_dir = reports_dir / "SPY" / "SavedReports" / "2026-05-05_deadbeef"
     (report_dir / "1_analysts").mkdir(parents=True)
     (report_dir / "4_risk").mkdir(parents=True)
-    (report_dir / "complete_report.md").write_text("# Complete\n\nSummary", encoding="utf-8")
+    (report_dir / "complete_report.md").write_text(
+        '# Complete\n\n### Social Analyst\n{"report": "## Social\\n\\nMomentum is strong"}\n',
+        encoding="utf-8",
+    )
     (report_dir / "1_analysts" / "market.md").write_text("## Market\n\nTrend up", encoding="utf-8")
+    (report_dir / "1_analysts" / "sentiment.md").write_text(
+        '{"report": "# Sentiment\\n\\nBullish conversation"}',
+        encoding="utf-8",
+    )
     (report_dir / "4_risk" / "aggressive.md").write_text("## Aggressive\n\nTake risk", encoding="utf-8")
 
     monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
@@ -113,7 +120,7 @@ def test_list_and_load_saved_report_snapshot(tmp_path, monkeypatch):
 
     assert reports[0]["report_id"] == "2026-05-05_deadbeef"
     assert reports[0]["source"] == "saved_report"
-    assert reports[0]["document_count"] == 3
+    assert reports[0]["document_count"] == 4
     assert loaded["ticker"] == "SPY"
     assert loaded["trade_date"] == "2026-05-05"
     assert loaded["report_hash"] == "deadbeef"
@@ -122,9 +129,23 @@ def test_list_and_load_saved_report_snapshot(tmp_path, monkeypatch):
     assert [document["path"] for document in loaded["documents"]] == [
         "complete_report.md",
         "1_analysts/market.md",
+        "1_analysts/sentiment.md",
         "4_risk/aggressive.md",
     ]
     assert loaded["documents"][0]["html"]
+    assert '{"report"' not in loaded["documents"][0]["markdown"]
+    assert "## Social" in loaded["documents"][0]["markdown"]
+    assert loaded["documents"][2]["markdown"] == "# Sentiment\n\nBullish conversation"
+
+
+def test_markdown_to_html_unwraps_json_and_renders_tables():
+    html = service._markdown_to_html(
+        '{"report": "**Recent Candle Analysis (May 1-8, 2026)**:\\n| Date | Close |\\n| --- | --- |\\n| May 1 | $542.21 |"}'
+    )
+
+    assert "Recent Candle Analysis" in html
+    assert "<table>" in html
+    assert "<td>May 1</td>" in html
 
 
 def test_run_job_saves_complete_report(tmp_path, monkeypatch):

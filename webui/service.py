@@ -86,6 +86,7 @@ _SECTION_TITLES = {
     "trader_investment_decision": "Trader Plan",
     "final_trade_decision": "Portfolio Decision",
 }
+_MARKDOWN_JSON_KEYS = ("report", "markdown", "content", "text", "body", "value")
 _SAVED_REPORT_ID_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}_[A-Za-z0-9._-]+$")
 _SAVED_REPORT_DOCUMENT_ORDER = {
     "complete_report.md": 0,
@@ -146,12 +147,128 @@ def _legacy_markdown_target_dir(filename: str) -> Path:
 
 
 def _markdown_to_html(text: str) -> str:
+    normalized_text = _normalize_markdown_text(text)
     if markdown is None:
-        return f"<pre>{escape(text or '')}</pre>"
+        return f"<pre>{escape(normalized_text or '')}</pre>"
     return markdown.markdown(
-        text or "",
+        normalized_text or "",
         extensions=["tables", "fenced_code", "sane_lists", "toc"],
     )
+
+
+def _normalize_markdown_text(text: Any) -> str:
+    if not isinstance(text, str):
+        return "" if text is None else str(text)
+
+    stripped = text.strip()
+    if stripped[:1] in {"{", "["}:
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            parsed = None
+        if parsed is not None:
+            extracted = _extract_markdown_from_json_value(parsed)
+            if extracted is not None:
+                return _normalize_markdown_tables(_replace_embedded_json_blocks(extracted))
+
+    return _normalize_markdown_tables(_replace_embedded_json_blocks(text))
+
+
+def _replace_embedded_json_blocks(text: str) -> str:
+    decoder = json.JSONDecoder()
+    parts: list[str] = []
+    cursor = 0
+
+    while cursor < len(text):
+        marker = text.find("{", cursor)
+        if marker == -1:
+            parts.append(text[cursor:])
+            break
+
+        parts.append(text[cursor:marker])
+        try:
+            payload, next_cursor = decoder.raw_decode(text, marker)
+        except json.JSONDecodeError:
+            parts.append(text[marker])
+            cursor = marker + 1
+            continue
+
+        extracted = _extract_markdown_from_json_value(payload)
+        if extracted is None:
+            parts.append(text[marker:next_cursor])
+        else:
+            parts.append(_normalize_markdown_text(extracted))
+        cursor = next_cursor
+
+    return "".join(parts)
+
+
+def _extract_markdown_from_json_value(value: Any, depth: int = 0) -> str | None:
+    if depth > 8:
+        return None
+
+    if isinstance(value, str):
+        return value
+
+    if isinstance(value, dict):
+        for key in _MARKDOWN_JSON_KEYS:
+            if key in value:
+                extracted = _extract_markdown_from_json_value(value[key], depth + 1)
+                if extracted is not None:
+                    return extracted
+
+        if len(value) == 1:
+            only_value = next(iter(value.values()))
+            extracted = _extract_markdown_from_json_value(only_value, depth + 1)
+            if extracted is not None:
+                return extracted
+        return None
+
+    if isinstance(value, list):
+        extracted_items = [
+            extracted
+            for item in value
+            if (extracted := _extract_markdown_from_json_value(item, depth + 1)) is not None
+        ]
+        if extracted_items:
+            return "\n\n".join(extracted_items)
+        return None
+
+    return None
+
+
+def _normalize_markdown_tables(text: str) -> str:
+    lines = text.splitlines()
+    if not lines:
+        return text
+
+    normalized: list[str] = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if _is_markdown_table_header(line, lines[index + 1] if index + 1 < len(lines) else None):
+            if normalized and normalized[-1].strip():
+                normalized.append("")
+            normalized.append(line)
+            normalized.append(lines[index + 1])
+            index += 2
+            while index < len(lines) and lines[index].lstrip().startswith("|"):
+                normalized.append(lines[index])
+                index += 1
+            continue
+
+        normalized.append(line)
+        index += 1
+
+    return "\n".join(normalized)
+
+
+def _is_markdown_table_header(line: str, next_line: str | None) -> bool:
+    if next_line is None:
+        return False
+    if "|" not in line:
+        return False
+    return bool(re.match(r"^\s*\|?(?:\s*:?-{3,}:?\s*\|)+(?:\s*:?-{3,}:?\s*)\|?\s*$", next_line))
 
 
 def _load_opencode_model() -> str | None:
@@ -517,7 +634,7 @@ def _load_saved_report(safe_ticker: str, report_dir: Path) -> dict[str, Any]:
         ),
     ):
         relative_path = path.relative_to(report_dir).as_posix()
-        markdown_text = path.read_text(encoding="utf-8")
+        markdown_text = _normalize_markdown_text(path.read_text(encoding="utf-8"))
         documents.append(
             {
                 "path": relative_path,
@@ -575,12 +692,13 @@ def _load_legacy_report(safe_ticker: str, trade_date: str) -> dict[str, Any]:
         value = payload.get(key)
         if not value:
             continue
+        normalized_value = _normalize_markdown_text(value)
         sections.append(
             {
                 "key": key,
                 "title": title,
-                "markdown": value,
-                "html": _markdown_to_html(value),
+                "markdown": normalized_value,
+                "html": _markdown_to_html(normalized_value),
             }
         )
 
@@ -592,13 +710,14 @@ def _load_legacy_report(safe_ticker: str, trade_date: str) -> dict[str, Any]:
         ("judge_decision", "Research Manager"),
     ):
         if investment.get(key):
+            normalized_value = _normalize_markdown_text(investment[key])
             debate_sections.append(
                 {
                     "group": "research",
                     "key": key,
                     "title": title,
-                    "markdown": investment[key],
-                    "html": _markdown_to_html(investment[key]),
+                    "markdown": normalized_value,
+                    "html": _markdown_to_html(normalized_value),
                 }
             )
 
@@ -610,13 +729,14 @@ def _load_legacy_report(safe_ticker: str, trade_date: str) -> dict[str, Any]:
         ("judge_decision", "Portfolio Manager"),
     ):
         if risk.get(key):
+            normalized_value = _normalize_markdown_text(risk[key])
             debate_sections.append(
                 {
                     "group": "risk",
                     "key": key,
                     "title": title,
-                    "markdown": risk[key],
-                    "html": _markdown_to_html(risk[key]),
+                    "markdown": normalized_value,
+                    "html": _markdown_to_html(normalized_value),
                 }
             )
 
