@@ -236,6 +236,8 @@ class OpenCodeClient(BaseLLMClient):
             check=True,
             cwd=cwd,
         )
+        if completed.stderr:
+            print(f"OpenCode stderr: {completed.stderr}")
         return self._parse_run_output(completed.stdout)
 
     def _parse_run_output(self, stdout: str) -> OpenCodeRunResult:
