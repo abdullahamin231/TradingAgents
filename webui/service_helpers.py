@@ -177,6 +177,51 @@ def normalize_token_usage_event(event: dict[str, Any], index: int) -> dict[str, 
     if not isinstance(event, dict):
         return None
 
+    # Saved token_usage.json files already contain normalized flat metrics, while
+    # live opencode callbacks provide nested tokens/time payloads. Accept both.
+    if any(
+        key in event
+        for key in (
+            "tokens_total",
+            "tokens_input",
+            "tokens_output",
+            "tokens_reasoning",
+            "tokens_cache_read",
+            "tokens_cache_write",
+            "started_at_ms",
+            "completed_at_ms",
+        )
+    ):
+        start_ms = event.get("started_at_ms")
+        end_ms = event.get("completed_at_ms")
+        started_at_ms = coerce_int(start_ms)
+        completed_at_ms = coerce_int(end_ms)
+        duration_ms = event.get("duration_ms")
+        if duration_ms is None and started_at_ms and completed_at_ms:
+            duration_ms = max(0, completed_at_ms - started_at_ms)
+
+        return {
+            "index": coerce_int(event.get("index")) if event.get("index") is not None else index,
+            "provider": event.get("provider") or "opencode",
+            "model": event.get("model") or "",
+            "session_id": event.get("session_id"),
+            "message_id": event.get("message_id"),
+            "reason": event.get("reason"),
+            "snapshot": event.get("snapshot"),
+            "cost": coerce_float(event.get("cost")),
+            "tokens_total": coerce_int(event.get("tokens_total")),
+            "tokens_input": coerce_int(event.get("tokens_input")),
+            "tokens_output": coerce_int(event.get("tokens_output")),
+            "tokens_reasoning": coerce_int(event.get("tokens_reasoning")),
+            "tokens_cache_read": coerce_int(event.get("tokens_cache_read")),
+            "tokens_cache_write": coerce_int(event.get("tokens_cache_write")),
+            "started_at_ms": started_at_ms,
+            "completed_at_ms": completed_at_ms,
+            "started_at": event.get("started_at") or iso_from_ms(start_ms),
+            "completed_at": event.get("completed_at") or iso_from_ms(end_ms),
+            "duration_ms": coerce_int(duration_ms),
+        }
+
     tokens = event.get("tokens") if isinstance(event.get("tokens"), dict) else {}
     cache = tokens.get("cache") if isinstance(tokens.get("cache"), dict) else {}
     timing = event.get("time") if isinstance(event.get("time"), dict) else {}
@@ -276,7 +321,7 @@ def load_token_usage_payload(path: Path) -> dict[str, Any] | None:
         return None
 
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload, _ = load_json_payload(path)
     except (OSError, json.JSONDecodeError):
         return None
 
