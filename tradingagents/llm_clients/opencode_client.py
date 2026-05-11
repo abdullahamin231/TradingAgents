@@ -1,5 +1,9 @@
+import errno
 import json
+import os
+import select
 from pathlib import Path
+import pty
 import subprocess
 import uuid
 from dataclasses import dataclass
@@ -229,16 +233,64 @@ class OpenCodeClient(BaseLLMClient):
             cwd_path = Path(self.working_dir)
             cwd_path.mkdir(parents=True, exist_ok=True)
             cwd = str(cwd_path)
-        completed = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=cwd,
-        )
-        if completed.stderr:
-            print(f"OpenCode stderr: {completed.stderr}")
-        return self._parse_run_output(completed.stdout)
+        stdout = self._run_binary_with_pty(command, cwd=cwd)
+        return self._parse_run_output(stdout)
+
+    def _run_binary_with_pty(
+        self,
+        command: list[str],
+        *,
+        cwd: str | None = None,
+    ) -> str:
+        master_fd, slave_fd = pty.openpty()
+        output_chunks: list[bytes] = []
+
+        try:
+            process = subprocess.Popen(
+                command,
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                cwd=cwd,
+                start_new_session=True,
+                close_fds=True,
+            )
+        finally:
+            os.close(slave_fd)
+
+        try:
+            while True:
+                ready, _, _ = select.select([master_fd], [], [], 0.1)
+                if master_fd in ready:
+                    try:
+                        chunk = os.read(master_fd, 4096)
+                    except OSError as exc:
+                        if exc.errno == errno.EIO:
+                            break
+                        raise
+                    if not chunk:
+                        break
+                    output_chunks.append(chunk)
+                    continue
+
+                if process.poll() is not None:
+                    try:
+                        chunk = os.read(master_fd, 4096)
+                    except OSError as exc:
+                        if exc.errno == errno.EIO:
+                            break
+                        raise
+                    if not chunk:
+                        break
+                    output_chunks.append(chunk)
+        finally:
+            os.close(master_fd)
+
+        return_code = process.wait()
+        stdout = b"".join(output_chunks).decode("utf-8", errors="replace")
+        if return_code != 0:
+            raise subprocess.CalledProcessError(return_code, command, output=stdout)
+        return stdout
 
     def _parse_run_output(self, stdout: str) -> OpenCodeRunResult:
         stripped = stdout.strip()
