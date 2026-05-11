@@ -1,0 +1,176 @@
+.app-shell {
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: var(--bg-alt);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.sidebar-section {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.tab-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.content-shell {
+  min-width: 0;
+}
+
+.tab-panel {
+  display: none;
+  min-height: 100vh;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.control-pane,
+.viewer-pane {
+  min-width: 0;
+  padding: 1rem 1.25rem;
+}
+
+.control-pane {
+  background: var(--bg-alt);
+}
+
+.viewer-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pane-header,
+.section-head,
+.field-grid,
+.provider-model-fields,
+.field,
+.stack-section,
+.jobs-list,
+.policy-list,
+.summary-strip,
+.job-head,
+.job-line,
+.summary-item,
+.report-meta-grid,
+.report-meta-item,
+.usage-chart-head,
+.usage-grid,
+.usage-chart-grid {
+  display: grid;
+}
+
+.pane-header,
+.section-head {
+  gap: 0.25rem;
+}
+
+.field-grid,
+.provider-model-fields {
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.field {
+  gap: 0.35rem;
+}
+
+.action-row,
+.report-file-toolbar,
+.ticker-list {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.action-row,
+.report-file-toolbar {
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.stack-section {
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.jobs-list,
+.policy-list,
+.summary-strip {
+  gap: 0.75rem;
+}
+
+.job-head,
+.job-line,
+.summary-item,
+.report-meta-grid,
+.report-meta-item,
+.usage-chart-head {
+  gap: 0.35rem;
+}
+
+.usage-grid {
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.usage-chart-grid {
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.job-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.ticker-list {
+  gap: 0.5rem;
+}
+
+.summary-strip {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.daily-table-shell {
+  overflow: auto;
+  flex: 1;
+  background: var(--bg-soft);
+}
+
+.report-pane {
+  min-height: 100vh;
+}
+
+.report-meta-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.report-view {
+  flex: 1;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.markdown-document {
+  max-width: 720px;
+  padding-bottom: 2rem;
+}

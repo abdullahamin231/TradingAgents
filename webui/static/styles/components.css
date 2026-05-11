@@ -1,0 +1,182 @@
+.section-label,
+.field-label,
+.status-pill,
+.message,
+.report-meta-label,
+.table-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sidebar-value {
+  font-size: 0.95rem;
+}
+
+.tab-button {
+  text-align: left;
+}
+
+.tab-button.active,
+.report-file-button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pane-header h1,
+.pane-header h2,
+.section-head h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pane-header p,
+.section-head p,
+.usage-chart-head p,
+.policy-item p,
+.ticker-summary,
+.report-browser-meta,
+.empty-state {
+  color: var(--muted);
+}
+
+.pane-header p,
+.section-head p {
+  font-size: 0.9rem;
+}
+
+.message {
+  min-height: 1rem;
+  margin-top: 0.75rem;
+}
+
+.jobs-list,
+.policy-list,
+.ticker-summary,
+.report-view,
+.report-file-list,
+.daily-table-shell,
+.usage-grid,
+.usage-chart-grid,
+.usage-chart-card,
+.usage-card {
+  min-width: 0;
+}
+
+.job-entry,
+.policy-item,
+.summary-item,
+.report-meta-item,
+.usage-card,
+.usage-chart-card {
+  background: var(--bg-soft);
+  padding: 0.85rem;
+}
+
+.usage-card strong,
+.usage-chart-head strong {
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.usage-chart-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  margin-bottom: 0.75rem;
+}
+
+.usage-chart-head h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.usage-chart-head p {
+  font-size: 0.82rem;
+}
+
+.usage-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.usage-chart polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: square;
+  stroke-linejoin: round;
+}
+
+.job-line {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.status-pill {
+  text-align: right;
+}
+
+.status-completed,
+.status-failed,
+.status-running,
+.status-queued,
+.status-pending {
+  color: var(--muted);
+}
+
+.ticker-chip {
+  background: var(--bg-soft);
+  padding: 0.45rem 0.55rem;
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.summary-item strong,
+.report-meta-item strong {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.daily-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.daily-table th,
+.daily-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  text-align: left;
+}
+
+.daily-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-strong);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.error-cell {
+  min-width: 10rem;
+  color: var(--text);
+}
+
+.report-path-value {
+  word-break: break-word;
+}
+
+.report-file-list.hidden,
+.hidden {
+  display: none !important;
+}
+
+.empty-state {
+  padding: 0.25rem 0;
+}

@@ -1,0 +1,23 @@
+@media (max-width: 960px) {
+  .app-shell,
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .tab-panel,
+  .workspace,
+  .report-pane {
+    min-height: auto;
+  }
+
+  .sidebar {
+    gap: 1rem;
+  }
+
+  .report-meta-grid,
+  .summary-strip,
+  .usage-grid,
+  .usage-chart-grid {
+    grid-template-columns: 1fr;
+  }
+}
