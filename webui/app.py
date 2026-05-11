@@ -21,6 +21,7 @@ from .service import (
     prepare_daily_run,
     queue_daily_run_entries,
     queue_single_ticker_run,
+    get_token_usage,
 )
 
 
@@ -76,6 +77,11 @@ def get_job(job_id: str) -> dict:
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@app.get("/api/token-usage")
+def token_usage() -> dict:
+    return get_token_usage(job_manager)
 
 
 @app.post("/api/jobs")

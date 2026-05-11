@@ -222,6 +222,22 @@ def test_run_job_saves_complete_report(tmp_path, monkeypatch):
             self.config = config
 
         def propagate(self, ticker, trade_date):
+            usage_callback = self.config["_opencode_usage_callback"]
+            usage_callback(
+                {
+                    "provider": "opencode",
+                    "model": "openai/gpt-5.4-mini",
+                    "cost": 0.5,
+                    "tokens": {
+                        "total": 100,
+                        "input": 40,
+                        "output": 20,
+                        "reasoning": 10,
+                        "cache": {"read": 25, "write": 5},
+                    },
+                    "time": {"start": 1000, "end": 2000},
+                }
+            )
             return {
                 "company_of_interest": ticker,
                 "trade_date": trade_date,
@@ -267,10 +283,17 @@ def test_run_job_saves_complete_report(tmp_path, monkeypatch):
     saved_report = tmp_path / job.report_path
     assert job.status == "completed"
     assert job.decision == "BUY"
+    assert job.usage_summary["tokens_total"] == 100
+    assert job.usage_summary["tokens_cache_read"] == 25
+    assert len(job.usage_events) == 1
     assert saved_report.name == "complete_report.md"
     assert saved_report.exists()
     assert (saved_report.parent / "1_analysts" / "market.md").exists()
     assert (saved_report.parent / "3_trading" / "trader.md").exists()
+    usage_path = saved_report.parent / service.TOKEN_USAGE_FILENAME
+    assert usage_path.exists()
+    usage_payload = json.loads(usage_path.read_text(encoding="utf-8"))
+    assert usage_payload["summary"]["tokens_total"] == 100
 
 
 def test_prepare_daily_run_builds_manifest(tmp_path, monkeypatch):
@@ -464,3 +487,89 @@ def test_queue_daily_run_recovers_concatenated_manifest(tmp_path, monkeypatch):
     assert [call[0] for call in manager.calls] == ["SPY", "NVDA"]
     assert queued["summary"]["total"] == 2
     assert queued["summary"]["queued"] == 2
+
+
+def test_get_token_usage_combines_saved_reports_and_live_jobs(tmp_path, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
+
+    saved_report_dir = reports_dir / "SPY" / "SavedReports" / "2026-05-05_deadbeef"
+    saved_report_dir.mkdir(parents=True)
+    (saved_report_dir / "complete_report.md").write_text("# Report", encoding="utf-8")
+    (saved_report_dir / service.TOKEN_USAGE_FILENAME).write_text(
+        json.dumps(
+            {
+                "job_id": "saved-job",
+                "ticker": "SPY",
+                "trade_date": "2026-05-05",
+                "workflow": service.WORKFLOW_DAILY_COVERAGE,
+                "provider": "opencode",
+                "quick_model": "openai/gpt-5.4-mini",
+                "deep_model": "openai/gpt-5.4",
+                "events": [
+                    {
+                        "provider": "opencode",
+                        "model": "openai/gpt-5.4",
+                        "tokens": {"total": 50, "input": 20, "output": 10, "reasoning": 5, "cache": {"read": 12, "write": 3}},
+                        "time": {"start": 1000, "end": 2000},
+                        "cost": 0.1,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    manager = service.TradingJobManager(max_workers=1)
+    live_job = service.JobState(
+        job_id="live-job",
+        ticker="NVDA",
+        trade_date="2026-05-06",
+        provider="opencode",
+        quick_model="openai/gpt-5.4-mini",
+        deep_model="openai/gpt-5.4",
+        status="running",
+        usage_summary={
+            "call_count": 1,
+            "cost": 0.2,
+            "tokens_total": 30,
+            "tokens_input": 12,
+            "tokens_output": 8,
+            "tokens_reasoning": 4,
+            "tokens_cache_read": 5,
+            "tokens_cache_write": 1,
+            "started_at": "1970-01-01T00:00:03Z",
+            "completed_at": "1970-01-01T00:00:04Z",
+            "started_at_ms": 3000,
+            "completed_at_ms": 4000,
+            "duration_ms": 1000,
+        },
+        usage_events=[
+            {
+                "provider": "opencode",
+                "model": "openai/gpt-5.4-mini",
+                "tokens_total": 30,
+                "tokens_input": 12,
+                "tokens_output": 8,
+                "tokens_reasoning": 4,
+                "tokens_cache_read": 5,
+                "tokens_cache_write": 1,
+                "started_at_ms": 3000,
+                "completed_at_ms": 4000,
+                "started_at": "1970-01-01T00:00:03Z",
+                "completed_at": "1970-01-01T00:00:04Z",
+                "cost": 0.2,
+            }
+        ],
+    )
+    manager._jobs[live_job.job_id] = live_job
+    manager._order.insert(0, live_job.job_id)
+
+    payload = service.get_token_usage(manager)
+
+    assert payload["summary"]["tokens_total"] == 80
+    assert payload["summary"]["tokens_input"] == 32
+    assert payload["summary"]["tokens_cache_read"] == 17
+    assert len(payload["records"]) == 2
+    assert payload["records"][0]["ticker"] == "NVDA"

@@ -128,6 +128,48 @@ _SAVED_REPORT_DOCUMENT_TITLES = {
     "4_risk/conservative.md": "Conservative Analyst",
     "5_portfolio/decision.md": "Portfolio Manager Decision",
 }
+TOKEN_USAGE_FILENAME = "token_usage.json"
+
+
+class TokenUsageCollector:
+    def __init__(
+        self,
+        *,
+        job_id: str,
+        ticker: str,
+        trade_date: str,
+        workflow: str,
+        provider: str,
+        quick_model: str,
+        deep_model: str,
+    ) -> None:
+        self.job_id = job_id
+        self.ticker = ticker
+        self.trade_date = trade_date
+        self.workflow = workflow
+        self.provider = provider
+        self.quick_model = quick_model
+        self.deep_model = deep_model
+        self._events: list[dict[str, Any]] = []
+
+    def record(self, event: dict[str, Any]) -> None:
+        normalized = _normalize_token_usage_event(event, len(self._events))
+        if normalized is not None:
+            self._events.append(normalized)
+
+    def snapshot(self) -> dict[str, Any]:
+        return _build_token_usage_payload(
+            self._events,
+            {
+                "job_id": self.job_id,
+                "ticker": self.ticker,
+                "trade_date": self.trade_date,
+                "workflow": self.workflow,
+                "provider": self.provider,
+                "quick_model": self.quick_model,
+                "deep_model": self.deep_model,
+            },
+        )
 
 
 def _ensure_reports_layout() -> None:
@@ -281,6 +323,121 @@ def _is_markdown_table_header(line: str, next_line: str | None) -> bool:
     return bool(re.match(r"^\s*\|?(?:\s*:?-{3,}:?\s*\|)+(?:\s*:?-{3,}:?\s*)\|?\s*$", next_line))
 
 
+def _coerce_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _coerce_float(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _iso_from_ms(value: Any) -> str | None:
+    try:
+        return datetime.utcfromtimestamp(float(value) / 1000.0).isoformat() + "Z"
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+def _normalize_token_usage_event(event: dict[str, Any], index: int) -> dict[str, Any] | None:
+    if not isinstance(event, dict):
+        return None
+
+    tokens = event.get("tokens") if isinstance(event.get("tokens"), dict) else {}
+    cache = tokens.get("cache") if isinstance(tokens.get("cache"), dict) else {}
+    timing = event.get("time") if isinstance(event.get("time"), dict) else {}
+
+    start_ms = timing.get("start")
+    end_ms = timing.get("end")
+    duration_ms = None
+    if isinstance(start_ms, (int, float)) and isinstance(end_ms, (int, float)):
+        duration_ms = max(0, int(end_ms - start_ms))
+
+    return {
+        "index": index,
+        "provider": event.get("provider") or "opencode",
+        "model": event.get("model") or "",
+        "session_id": event.get("session_id"),
+        "message_id": event.get("message_id"),
+        "reason": event.get("reason"),
+        "snapshot": event.get("snapshot"),
+        "cost": _coerce_float(event.get("cost")),
+        "tokens_total": _coerce_int(tokens.get("total")),
+        "tokens_input": _coerce_int(tokens.get("input")),
+        "tokens_output": _coerce_int(tokens.get("output")),
+        "tokens_reasoning": _coerce_int(tokens.get("reasoning")),
+        "tokens_cache_read": _coerce_int(cache.get("read")),
+        "tokens_cache_write": _coerce_int(cache.get("write")),
+        "started_at_ms": _coerce_int(start_ms),
+        "completed_at_ms": _coerce_int(end_ms),
+        "started_at": _iso_from_ms(start_ms),
+        "completed_at": _iso_from_ms(end_ms),
+        "duration_ms": duration_ms,
+    }
+
+
+def _token_usage_summary(events: list[dict[str, Any]]) -> dict[str, Any]:
+    if not events:
+        return {
+            "call_count": 0,
+            "cost": 0.0,
+            "tokens_total": 0,
+            "tokens_input": 0,
+            "tokens_output": 0,
+            "tokens_reasoning": 0,
+            "tokens_cache_read": 0,
+            "tokens_cache_write": 0,
+            "started_at": None,
+            "completed_at": None,
+            "started_at_ms": None,
+            "completed_at_ms": None,
+            "duration_ms": 0,
+        }
+
+    started_values = [event["started_at_ms"] for event in events if event.get("started_at_ms")]
+    completed_values = [event["completed_at_ms"] for event in events if event.get("completed_at_ms")]
+    started_at_ms = min(started_values) if started_values else None
+    completed_at_ms = max(completed_values) if completed_values else None
+    duration_ms = (
+        max(0, int(completed_at_ms - started_at_ms))
+        if started_at_ms is not None and completed_at_ms is not None
+        else 0
+    )
+
+    return {
+        "call_count": len(events),
+        "cost": round(sum(_coerce_float(event.get("cost")) for event in events), 8),
+        "tokens_total": sum(_coerce_int(event.get("tokens_total")) for event in events),
+        "tokens_input": sum(_coerce_int(event.get("tokens_input")) for event in events),
+        "tokens_output": sum(_coerce_int(event.get("tokens_output")) for event in events),
+        "tokens_reasoning": sum(_coerce_int(event.get("tokens_reasoning")) for event in events),
+        "tokens_cache_read": sum(_coerce_int(event.get("tokens_cache_read")) for event in events),
+        "tokens_cache_write": sum(_coerce_int(event.get("tokens_cache_write")) for event in events),
+        "started_at": _iso_from_ms(started_at_ms),
+        "completed_at": _iso_from_ms(completed_at_ms),
+        "started_at_ms": started_at_ms,
+        "completed_at_ms": completed_at_ms,
+        "duration_ms": duration_ms,
+    }
+
+
+def _build_token_usage_payload(events: list[dict[str, Any]], metadata: dict[str, Any]) -> dict[str, Any]:
+    normalized_events = sorted(
+        (copy.deepcopy(event) for event in events),
+        key=lambda event: (event.get("started_at_ms") or 0, event.get("completed_at_ms") or 0, event.get("index") or 0),
+    )
+    return {
+        **metadata,
+        "summary": _token_usage_summary(normalized_events),
+        "events": normalized_events,
+    }
+
+
 def _load_opencode_models() -> tuple[str | None, str | None]:
     if not OPENCODE_CONFIG_PATH.exists():
         return None, None
@@ -303,7 +460,10 @@ def _load_opencode_models() -> tuple[str | None, str | None]:
 def get_provider_default_model(provider: str, mode: str = "deep") -> str:
     provider_lower = provider.lower()
     if provider_lower == "opencode":
-        return OPENCODE_DEFAULT_QUICK_MODEL if mode == "quick" else OPENCODE_DEFAULT_DEEP_MODEL
+        opencode_quick_model, opencode_deep_model = _load_opencode_models()
+        if mode == "quick":
+            return opencode_quick_model or OPENCODE_DEFAULT_QUICK_MODEL
+        return opencode_deep_model or OPENCODE_DEFAULT_DEEP_MODEL
 
     default_model_factory = _PROVIDER_DEFAULT_MODELS.get(provider_lower)
     if default_model_factory is not None:
@@ -396,6 +556,8 @@ class JobState:
     status: str = "queued"
     decision: str | None = None
     report_path: str | None = None
+    usage_summary: dict[str, Any] | None = None
+    usage_events: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     started_at: str | None = None
@@ -476,6 +638,18 @@ class TradingJobManager:
 
         try:
             config = build_run_config(job.provider, job.quick_model, job.deep_model)
+            usage_collector = None
+            if job.provider == "opencode":
+                usage_collector = TokenUsageCollector(
+                    job_id=job.job_id,
+                    ticker=job.ticker,
+                    trade_date=job.trade_date,
+                    workflow=job.workflow,
+                    provider=job.provider,
+                    quick_model=job.quick_model,
+                    deep_model=job.deep_model,
+                )
+                config["_opencode_usage_callback"] = usage_collector.record
             graph = TradingAgentsGraph(debug=False, config=config)
             final_state, decision = graph.propagate(job.ticker, job.trade_date)
 
@@ -486,11 +660,17 @@ class TradingJobManager:
                 / f"{job.trade_date}_{job.job_id[:8]}"
             )
             complete_report_path = save_complete_report(final_state, job.ticker, export_dir)
+            usage_payload = usage_collector.snapshot() if usage_collector is not None else None
+            if usage_payload is not None and (usage_payload["summary"]["call_count"] or usage_payload["events"]):
+                _atomic_write_json(_token_usage_path(export_dir), usage_payload)
 
             with self._lock:
                 job.status = "completed"
                 job.decision = decision
                 job.report_path = str(complete_report_path.relative_to(REPO_ROOT))
+                if usage_payload is not None:
+                    job.usage_summary = usage_payload["summary"]
+                    job.usage_events = usage_payload["events"]
                 job.completed_at = datetime.utcnow().isoformat() + "Z"
             if job.workflow == WORKFLOW_DAILY_COVERAGE:
                 _update_daily_run_job_state(
@@ -505,9 +685,13 @@ class TradingJobManager:
                     error=None,
                 )
         except Exception as exc:  # pragma: no cover - surfaced to API
+            usage_summary = usage_collector.snapshot() if "usage_collector" in locals() and usage_collector is not None else None
             with self._lock:
                 job.status = "failed"
                 job.error = str(exc)
+                if usage_summary is not None:
+                    job.usage_summary = usage_summary["summary"]
+                    job.usage_events = usage_summary["events"]
                 job.completed_at = datetime.utcnow().isoformat() + "Z"
             if job.workflow == WORKFLOW_DAILY_COVERAGE:
                 _update_daily_run_job_state(
@@ -590,6 +774,40 @@ def _list_saved_report_runs(safe_ticker: str) -> list[dict[str, Any]]:
             }
         )
     return runs
+
+
+def _token_usage_path(report_dir: Path) -> Path:
+    return report_dir / TOKEN_USAGE_FILENAME
+
+
+def _load_token_usage_payload(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    events = payload.get("events") if isinstance(payload.get("events"), list) else []
+    metadata = {
+        key: value
+        for key, value in payload.items()
+        if key not in {"summary", "events"}
+    }
+    normalized_events = [
+        normalized
+        for index, event in enumerate(events)
+        if (normalized := _normalize_token_usage_event(event, index)) is not None
+    ]
+    normalized_payload = _build_token_usage_payload(normalized_events, metadata)
+    if summary and not normalized_events:
+        normalized_payload["summary"] = summary
+    return normalized_payload
 
 
 def _list_legacy_report_runs(safe_ticker: str) -> list[dict[str, Any]]:
@@ -1039,6 +1257,110 @@ def queue_daily_run_entries(
         updated = get_daily_run(trade_date)
         updated["queued_jobs"] = queued
         return updated
+
+
+def _iter_saved_usage_records() -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    if not REPORTS_DIR.exists():
+        return records
+
+    for ticker_dir in sorted(REPORTS_DIR.iterdir()):
+        if not ticker_dir.is_dir() or ticker_dir.name in REPORTS_SYSTEM_DIRS:
+            continue
+        saved_dir = ticker_dir / "SavedReports"
+        if not saved_dir.exists():
+            continue
+        for report_dir in sorted((path for path in saved_dir.iterdir() if path.is_dir()), reverse=True):
+            payload = _load_token_usage_payload(_token_usage_path(report_dir))
+            if payload is None:
+                continue
+            records.append(
+                {
+                    "record_id": payload.get("job_id") or report_dir.name,
+                    "source": "saved_report",
+                    "status": "completed",
+                    "report_id": report_dir.name,
+                    "relative_path": str(report_dir.relative_to(REPO_ROOT)),
+                    "report_path": str((report_dir / "complete_report.md").relative_to(REPO_ROOT)) if (report_dir / "complete_report.md").exists() else None,
+                    **payload,
+                }
+            )
+    return records
+
+
+def _job_usage_record(job: dict[str, Any]) -> dict[str, Any] | None:
+    summary = job.get("usage_summary")
+    events = job.get("usage_events") or []
+    if not summary and not events:
+        return None
+
+    metadata = {
+        "job_id": job.get("job_id"),
+        "ticker": job.get("ticker"),
+        "trade_date": job.get("trade_date"),
+        "workflow": job.get("workflow"),
+        "provider": job.get("provider"),
+        "quick_model": job.get("quick_model"),
+        "deep_model": job.get("deep_model"),
+    }
+    payload = _build_token_usage_payload(events, metadata)
+    if summary:
+        payload["summary"] = summary
+    return {
+        "record_id": job.get("job_id"),
+        "source": "job",
+        "status": job.get("status"),
+        "report_id": None,
+        "relative_path": None,
+        "report_path": job.get("report_path"),
+        "started_at": job.get("started_at"),
+        "completed_at": job.get("completed_at"),
+        **payload,
+    }
+
+
+def get_token_usage(job_manager: TradingJobManager) -> dict[str, Any]:
+    records: list[dict[str, Any]] = []
+    dedupe_keys: set[str] = set()
+
+    for record in _iter_saved_usage_records():
+        key = record.get("job_id") or record.get("report_path") or record["record_id"]
+        dedupe_keys.add(str(key))
+        records.append(record)
+
+    for job in job_manager.list_jobs():
+        if job.get("provider") != "opencode":
+            continue
+        record = _job_usage_record(job)
+        if record is None:
+            continue
+        key = record.get("job_id") or record.get("report_path") or record["record_id"]
+        if str(key) in dedupe_keys:
+            records = [existing for existing in records if str(existing.get("job_id") or existing.get("report_path") or existing["record_id"]) != str(key)]
+        dedupe_keys.add(str(key))
+        records.append(record)
+
+    records.sort(
+        key=lambda record: (
+            (record.get("summary") or {}).get("completed_at_ms") or 0,
+            (record.get("summary") or {}).get("started_at_ms") or 0,
+            record.get("record_id") or "",
+        ),
+        reverse=True,
+    )
+
+    aggregate_events = [
+        dict(event, record_id=record["record_id"], ticker=record.get("ticker"), trade_date=record.get("trade_date"))
+        for record in records
+        for event in (record.get("events") or [])
+    ]
+    aggregate = _build_token_usage_payload(aggregate_events, {"provider": "opencode"})
+
+    return {
+        "summary": aggregate["summary"],
+        "events": aggregate["events"],
+        "records": records,
+    }
 
 
 def queue_single_ticker_run(

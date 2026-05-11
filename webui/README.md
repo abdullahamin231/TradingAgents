@@ -12,6 +12,7 @@ The interface:
 - lets you choose the LLM provider per batch run
 - uses the active OpenCode defaults from `opencode.json` when provider is OpenCode
 - lets you override separate quick/deep models for OpenCode and other providers
+- tracks OpenCode token usage in a dedicated `Token Usage` tab, including totals and time-series charts from `--format json`
 - browses saved markdown snapshots from `reports/<ticker>/SavedReports/<date>_<hash>/`
 - falls back to legacy JSON logs from `reports/<ticker>/TradingAgentsStrategy_logs/` when no saved snapshot exists
 

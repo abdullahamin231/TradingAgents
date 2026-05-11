@@ -31,7 +31,11 @@ class TestOpenCodeClient:
         mock_run.return_value = subprocess.CompletedProcess(
             args=["binary", "run", "prompt"],
             returncode=0,
-            stdout="binary output\n",
+            stdout=(
+                '{"type":"step_start","timestamp":1778507973646,"sessionID":"ses_123","part":{"snapshot":"snap1"}}\n'
+                '{"type":"text","timestamp":1778507976660,"sessionID":"ses_123","part":{"text":"binary output"}}\n'
+                '{"type":"step_finish","timestamp":1778507976713,"sessionID":"ses_123","part":{"reason":"stop","messageID":"msg1","snapshot":"snap1","tokens":{"total":8869,"input":123,"output":8,"reasoning":34,"cache":{"write":0,"read":8704}},"cost":0}}\n'
+            ),
             stderr="",
         )
 
@@ -40,7 +44,8 @@ class TestOpenCodeClient:
 
         assert isinstance(result, AIMessage)
         assert result.content == "binary output"
-        assert mock_run.call_args.args[0] == ["opencode", "run", "--model", "any-model", "--pure", "Prompt text"]
+        assert result.additional_kwargs["opencode_usage"]["tokens"]["total"] == 8869
+        assert mock_run.call_args.args[0] == ["opencode", "run", "--format", "json", "--model", "any-model", "--pure", "Prompt text"]
 
     @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
     def test_with_structured_output_parses_json(self, mock_run):
@@ -145,7 +150,7 @@ class TestOpenCodeClient:
         mock_run.return_value = subprocess.CompletedProcess(
             args=["binary", "run", "prompt"],
             returncode=0,
-            stdout="ok",
+            stdout='{"type":"text","part":{"text":"ok"}}\n{"type":"step_finish","part":{"tokens":{"total":1,"input":1,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"cost":0}}',
             stderr="",
         )
 
@@ -161,6 +166,28 @@ class TestOpenCodeClient:
         assert "SYSTEM:" in opencode_prompt
         assert "HUMAN:" in opencode_prompt
         assert "Summarize NVDA." in opencode_prompt
+
+    @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
+    def test_usage_callback_receives_usage_payload(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["binary", "run", "prompt"],
+            returncode=0,
+            stdout=(
+                '{"type":"step_start","timestamp":1000,"sessionID":"ses_123","part":{"snapshot":"snap1"}}\n'
+                '{"type":"text","timestamp":1500,"sessionID":"ses_123","part":{"text":"Hello."}}\n'
+                '{"type":"step_finish","timestamp":2000,"sessionID":"ses_123","part":{"reason":"stop","messageID":"msg1","snapshot":"snap1","tokens":{"total":20,"input":5,"output":3,"reasoning":2,"cache":{"write":1,"read":9}},"cost":0.25}}\n'
+            ),
+            stderr="",
+        )
+        seen = []
+
+        client = OpenCodeClient("any-model", usage_callback=seen.append)
+        result = client.invoke("Prompt text")
+
+        assert result.content == "Hello."
+        assert seen[0]["time"] == {"start": 1000, "end": 2000}
+        assert seen[0]["tokens"]["cache"] == {"read": 9, "write": 1}
+        assert seen[0]["cost"] == 0.25
 
 
 @pytest.mark.unit

@@ -151,6 +151,11 @@ class TradingAgentsGraph:
             if effort:
                 kwargs["effort"] = effort
 
+        elif provider == "opencode":
+            usage_callback = self.config.get("_opencode_usage_callback")
+            if usage_callback:
+                kwargs["usage_callback"] = usage_callback
+
         return kwargs
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:

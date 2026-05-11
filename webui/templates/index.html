@@ -15,6 +15,7 @@
             <button class="tab-button active" type="button" data-tab-target="on-demand">On-Demand</button>
             <button class="tab-button" type="button" data-tab-target="daily-coverage">Daily Coverage</button>
             <button class="tab-button" type="button" data-tab-target="saved-reports">Saved Reports</button>
+            <button class="tab-button" type="button" data-tab-target="token-usage">Token Usage</button>
           </div>
         </section>
 
@@ -196,6 +197,35 @@
               </div>
               <div id="report-file-list" class="report-file-list hidden"></div>
               <div id="report-view" class="report-view empty-state">Select a ticker and report date to render the saved analysis.</div>
+            </section>
+          </div>
+        </section>
+
+        <section id="token-usage" class="tab-panel">
+          <div class="workspace">
+            <section class="control-pane">
+              <div class="pane-header">
+                <h1>Token usage</h1>
+                <p>Aggregated OpenCode token telemetry across tracked runs.</p>
+              </div>
+
+              <div id="token-usage-summary" class="usage-grid empty-state">Loading token usage...</div>
+
+              <section class="stack-section">
+                <div class="section-head">
+                  <h2>Metrics over time</h2>
+                  <p>Each chart is cumulative across recorded OpenCode calls.</p>
+                </div>
+                <div id="token-usage-charts" class="usage-chart-grid empty-state">No token usage recorded yet.</div>
+              </section>
+            </section>
+
+            <section class="viewer-pane">
+              <div class="pane-header">
+                <h2>Tracked runs</h2>
+                <p>Saved reports and in-memory jobs with token details.</p>
+              </div>
+              <div id="token-usage-runs" class="daily-table-shell empty-state">No token usage recorded yet.</div>
             </section>
           </div>
         </section>
