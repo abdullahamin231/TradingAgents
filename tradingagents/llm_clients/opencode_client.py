@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import subprocess
 import uuid
 from typing import Any, Iterable, Optional
@@ -141,10 +142,12 @@ class OpenCodeClient(BaseLLMClient):
         model: str,
         base_url: Optional[str] = None,
         provider: str = "opencode",
+        working_dir: Optional[str] = None,
         **kwargs,
     ):
         super().__init__(model, base_url, **kwargs)
         self.provider = provider.lower()
+        self.working_dir = working_dir
 
     def get_llm(self) -> Any:
         return self
@@ -208,12 +211,19 @@ class OpenCodeClient(BaseLLMClient):
         command = [*_DEFAULT_OPENCODE_COMMAND]
         if self.model:
             command.extend(["--model", self.model])
+        command.append("--pure")
         command.append(prompt)
+        cwd = None
+        if self.working_dir:
+            cwd_path = Path(self.working_dir)
+            cwd_path.mkdir(parents=True, exist_ok=True)
+            cwd = str(cwd_path)
         completed = subprocess.run(
             command,
             capture_output=True,
             text=True,
             check=True,
+            cwd=cwd,
         )
         return completed.stdout.strip()
 

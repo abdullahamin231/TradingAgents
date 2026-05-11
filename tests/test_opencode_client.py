@@ -40,7 +40,7 @@ class TestOpenCodeClient:
 
         assert isinstance(result, AIMessage)
         assert result.content == "binary output"
-        assert mock_run.call_args.args[0] == ["opencode", "run", "--model", "any-model", "Prompt text"]
+        assert mock_run.call_args.args[0] == ["opencode", "run", "--model", "any-model", "--pure", "Prompt text"]
 
     @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
     def test_with_structured_output_parses_json(self, mock_run):

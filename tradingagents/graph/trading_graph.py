@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 from langgraph.prebuilt import ToolNode
 
 from tradingagents.llm_clients import create_llm_client
+from tradingagents.llm_clients.opencode_client import OpenCodeClient
 
 from tradingagents.agents import *
 from tradingagents.default_config import DEFAULT_CONFIG
@@ -270,6 +271,7 @@ class TradingAgentsGraph:
         successful node on a subsequent invocation with the same ticker+date.
         """
         self.ticker = company_name
+        self._prepare_llm_working_dirs(company_name)
 
         # Resolve any pending memory-log entries for this ticker before the pipeline runs.
         self._resolve_pending_entries(company_name)
@@ -299,6 +301,15 @@ class TradingAgentsGraph:
                 self._checkpointer_ctx.__exit__(None, None, None)
                 self._checkpointer_ctx = None
                 self.graph = self.workflow.compile()
+
+    def _prepare_llm_working_dirs(self, ticker: str) -> None:
+        safe_ticker = safe_ticker_component(ticker)
+        ticker_dir = Path(self.config["results_dir"]) / safe_ticker
+        ticker_dir.mkdir(parents=True, exist_ok=True)
+
+        for llm in (self.deep_thinking_llm, self.quick_thinking_llm):
+            if isinstance(llm, OpenCodeClient):
+                llm.working_dir = str(ticker_dir)
 
     def _run_graph(self, company_name, trade_date):
         """Execute the graph and write the resulting state to disk and memory log."""
