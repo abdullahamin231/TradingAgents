@@ -303,10 +303,7 @@ def _load_opencode_models() -> tuple[str | None, str | None]:
 def get_provider_default_model(provider: str, mode: str = "deep") -> str:
     provider_lower = provider.lower()
     if provider_lower == "opencode":
-        quick_model, deep_model = _load_opencode_models()
-        if mode == "quick":
-            return quick_model or deep_model or OPENCODE_DEFAULT_QUICK_MODEL
-        return deep_model or quick_model or OPENCODE_DEFAULT_DEEP_MODEL
+        return OPENCODE_DEFAULT_QUICK_MODEL if mode == "quick" else OPENCODE_DEFAULT_DEEP_MODEL
 
     default_model_factory = _PROVIDER_DEFAULT_MODELS.get(provider_lower)
     if default_model_factory is not None:
