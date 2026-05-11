@@ -20,6 +20,7 @@ from .service import (
     load_report,
     prepare_daily_run,
     queue_daily_run_entries,
+    queue_single_ticker_run,
 )
 
 
@@ -34,9 +35,8 @@ class RunRequest(BaseModel):
     ticker: str = Field(min_length=1, max_length=32)
     trade_date: str
     provider: str = Field(default="opencode", min_length=1, max_length=32)
-    model: str | None = Field(default=None, max_length=128)
-    quick_model: str | None = Field(default=None, max_length=128)
-    deep_model: str | None = Field(default=None, max_length=128)
+    quick_model: str = Field(default="", max_length=128)
+    deep_model: str = Field(default="", max_length=128)
 
 
 class BatchRunRequest(BaseModel):
@@ -45,9 +45,8 @@ class BatchRunRequest(BaseModel):
 
 class DailyRunQueueRequest(BaseModel):
     provider: str = Field(default="opencode", min_length=1, max_length=32)
-    model: str | None = Field(default=None, max_length=128)
-    quick_model: str | None = Field(default=None, max_length=128)
-    deep_model: str | None = Field(default=None, max_length=128)
+    quick_model: str = Field(default="", max_length=128)
+    deep_model: str = Field(default="", max_length=128)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -86,10 +85,10 @@ def create_jobs(payload: BatchRunRequest) -> dict:
             job_manager.submit(
                 run.ticker,
                 run.trade_date,
-                "analysis_on_demand",
+                "daily_coverage",
                 run.provider,
-                run.quick_model or run.model,
-                run.deep_model or run.model,
+                run.quick_model,
+                run.deep_model,
             )
             for run in payload.runs
         ]
@@ -101,17 +100,16 @@ def create_jobs(payload: BatchRunRequest) -> dict:
 @app.post("/api/on-demand/run")
 def run_on_demand(payload: RunRequest) -> dict:
     try:
-        job = job_manager.submit(
+        return queue_single_ticker_run(
+            job_manager,
             payload.ticker,
             payload.trade_date,
-            "analysis_on_demand",
-            payload.provider,
-            payload.quick_model or payload.model,
-            payload.deep_model or payload.model,
+            provider=payload.provider,
+            quick_model=payload.quick_model,
+            deep_model=payload.deep_model,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"job": job_manager.get_job(job.job_id)}
 
 
 @app.get("/api/daily-watchlist")
@@ -142,8 +140,8 @@ def queue_daily_coverage(trade_date: str, payload: DailyRunQueueRequest) -> dict
             job_manager,
             trade_date,
             provider=payload.provider,
-            quick_model=payload.quick_model or payload.model,
-            deep_model=payload.deep_model or payload.model,
+            quick_model=payload.quick_model,
+            deep_model=payload.deep_model,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -156,8 +154,8 @@ def retry_daily_ticker(trade_date: str, ticker: str, payload: DailyRunQueueReque
             job_manager,
             trade_date,
             provider=payload.provider,
-            quick_model=payload.quick_model or payload.model,
-            deep_model=payload.deep_model or payload.model,
+            quick_model=payload.quick_model,
+            deep_model=payload.deep_model,
             tickers=[ticker],
             retry_failed_only=True,
         )

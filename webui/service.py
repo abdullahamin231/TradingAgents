@@ -39,6 +39,8 @@ OPENCODE_CONFIG_PATH = REPO_ROOT / "opencode.json"
 DAILY_RUNS_DIRNAME = "daily_runs"
 REPORTS_SYSTEM_DIRS = {"cache", "memory", DAILY_RUNS_DIRNAME, "_legacy_root_artifacts"}
 _daily_manifest_lock = threading.RLock()
+OPENCODE_DEFAULT_QUICK_MODEL = "openai/gpt-5.4-mini"
+OPENCODE_DEFAULT_DEEP_MODEL = "openai/gpt-5.4"
 DEFAULT_DAILY_TICKERS = (
     "MU","SNDK","MXL","LITE","AXTI","ICHR","AMD","SIMO","PBR.A","TSM","PBR","UCTT","SNEX","ASX","CRDO","DGELL","NVTS","TTE","COHU","BAC"
 )
@@ -73,8 +75,8 @@ _PROVIDER_DEFAULT_MODELS = {
     "deepseek": lambda mode: get_model_options("deepseek", mode)[0][1],
     "qwen": lambda mode: get_model_options("qwen", mode)[0][1],
     "glm": lambda mode: get_model_options("glm", mode)[0][1],
-    "openrouter": lambda mode: DEFAULT_CONFIG["deep_think_llm"],
-    "azure": lambda mode: DEFAULT_CONFIG["deep_think_llm"],
+    "openrouter": lambda mode: DEFAULT_CONFIG["quick_think_llm"] if mode == "quick" else DEFAULT_CONFIG["deep_think_llm"],
+    "azure": lambda mode: DEFAULT_CONFIG["quick_think_llm"] if mode == "quick" else DEFAULT_CONFIG["deep_think_llm"],
     "ollama": lambda mode: "llama3.1",
 }
 _SECTION_TITLES = {
@@ -303,14 +305,31 @@ def get_provider_default_model(provider: str, mode: str = "deep") -> str:
     if provider_lower == "opencode":
         quick_model, deep_model = _load_opencode_models()
         if mode == "quick":
-            return quick_model or deep_model or "opencode"
-        return deep_model or quick_model or "opencode"
+            return quick_model or deep_model or OPENCODE_DEFAULT_QUICK_MODEL
+        return deep_model or quick_model or OPENCODE_DEFAULT_DEEP_MODEL
 
     default_model_factory = _PROVIDER_DEFAULT_MODELS.get(provider_lower)
     if default_model_factory is not None:
         return default_model_factory(mode)
 
-    return DEFAULT_CONFIG["deep_think_llm"]
+    return DEFAULT_CONFIG["quick_think_llm"] if mode == "quick" else DEFAULT_CONFIG["deep_think_llm"]
+
+
+def _normalize_model_name(model: str | None) -> str:
+    if isinstance(model, str):
+        return model.strip()
+    return ""
+
+
+def resolve_run_models(
+    provider: str,
+    quick_model: str | None = None,
+    deep_model: str | None = None,
+) -> tuple[str, str]:
+    provider_lower = provider.lower()
+    resolved_quick_model = _normalize_model_name(quick_model) or get_provider_default_model(provider_lower, "quick")
+    resolved_deep_model = _normalize_model_name(deep_model) or get_provider_default_model(provider_lower, "deep")
+    return resolved_quick_model, resolved_deep_model
 
 
 def build_run_config(
@@ -321,15 +340,10 @@ def build_run_config(
     _ensure_reports_layout()
     config = copy.deepcopy(DEFAULT_CONFIG)
     provider_lower = provider.lower()
-    resolved_quick_model = (
-        quick_model.strip()
-        if isinstance(quick_model, str) and quick_model.strip()
-        else get_provider_default_model(provider_lower, "quick")
-    )
-    resolved_deep_model = (
-        deep_model.strip()
-        if isinstance(deep_model, str) and deep_model.strip()
-        else get_provider_default_model(provider_lower, "deep")
+    resolved_quick_model, resolved_deep_model = resolve_run_models(
+        provider_lower,
+        quick_model,
+        deep_model,
     )
 
     config["llm_provider"] = provider_lower
@@ -380,8 +394,8 @@ class JobState:
     trade_date: str
     workflow: str = WORKFLOW_ON_DEMAND
     provider: str = "opencode"
-    quick_model: str | None = None
-    deep_model: str | None = None
+    quick_model: str = ""
+    deep_model: str = ""
     status: str = "queued"
     decision: str | None = None
     report_path: str | None = None
@@ -410,15 +424,10 @@ class TradingJobManager:
     ) -> JobState:
         safe_ticker = safe_ticker_component(ticker.strip().upper())
         provider_lower = provider.strip().lower()
-        resolved_quick_model = (
-            quick_model.strip()
-            if isinstance(quick_model, str) and quick_model.strip()
-            else get_provider_default_model(provider_lower, "quick")
-        )
-        resolved_deep_model = (
-            deep_model.strip()
-            if isinstance(deep_model, str) and deep_model.strip()
-            else get_provider_default_model(provider_lower, "deep")
+        resolved_quick_model, resolved_deep_model = resolve_run_models(
+            provider_lower,
+            quick_model,
+            deep_model,
         )
 
         job = JobState(
@@ -1033,3 +1042,23 @@ def queue_daily_run_entries(
         updated = get_daily_run(trade_date)
         updated["queued_jobs"] = queued
         return updated
+
+
+def queue_single_ticker_run(
+    job_manager: TradingJobManager,
+    ticker: str,
+    trade_date: str,
+    *,
+    provider: str = "opencode",
+    quick_model: str | None = None,
+    deep_model: str | None = None,
+) -> dict[str, Any]:
+    job = job_manager.submit(
+        ticker,
+        trade_date,
+        WORKFLOW_DAILY_COVERAGE,
+        provider,
+        quick_model,
+        deep_model,
+    )
+    return {"job": job_manager.get_job(job.job_id)}

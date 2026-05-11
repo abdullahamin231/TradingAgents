@@ -107,10 +107,8 @@ function renderProviders() {
 
 function providerPayload(groupName) {
   const group = providerGroups[groupName];
-  const provider = group.select.value;
   return {
-    provider,
-    model: null,
+    provider: group.select.value,
     quick_model: group.quickInput.value.trim(),
     deep_model: group.deepInput.value.trim(),
   };

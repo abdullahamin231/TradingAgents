@@ -73,6 +73,33 @@ def test_build_run_config_supports_distinct_opencode_overrides(tmp_path, monkeyp
     assert config["deep_think_llm"] == "opencode/deep-override"
 
 
+def test_resolve_run_models_falls_back_to_provider_defaults(tmp_path, monkeypatch):
+    opencode_path = tmp_path / "opencode.json"
+    opencode_path.write_text(
+        json.dumps(
+            {
+                "quick_model": "opencode/quick-default",
+                "deep_model": "opencode/deep-default",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(service, "OPENCODE_CONFIG_PATH", opencode_path)
+
+    quick_model, deep_model = service.resolve_run_models("opencode", "", "")
+
+    assert quick_model == "opencode/quick-default"
+    assert deep_model == "opencode/deep-default"
+
+
+def test_get_provider_default_model_uses_openai_defaults_when_opencode_config_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "OPENCODE_CONFIG_PATH", tmp_path / "missing-opencode.json")
+
+    assert service.get_provider_default_model("opencode", "quick") == "openai/gpt-5.4-mini"
+    assert service.get_provider_default_model("opencode", "deep") == "openai/gpt-5.4"
+
+
 def test_list_llm_providers_includes_opencode_and_google():
     providers = service.list_llm_providers()
     values = {provider["value"] for provider in providers}
@@ -291,6 +318,53 @@ def test_queue_daily_run_only_queues_incomplete_entries(tmp_path, monkeypatch):
     assert manager.calls[0][5] is None
     assert queued["summary"]["completed"] == 1
     assert queued["summary"]["queued"] == 1
+
+
+def test_queue_single_ticker_run_uses_daily_coverage_workflow(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "REPORTS_DIR", tmp_path / "reports")
+
+    class FakeJobManager:
+        def __init__(self):
+            self.calls = []
+            self.job = {
+                "job_id": "job-spy",
+                "ticker": "SPY",
+                "trade_date": "2026-05-09",
+                "workflow": service.WORKFLOW_DAILY_COVERAGE,
+                "provider": "opencode",
+                "quick_model": "opencode/quick",
+                "deep_model": "opencode/deep",
+            }
+
+        def submit(self, ticker, trade_date, workflow, provider, quick_model, deep_model):
+            self.calls.append((ticker, trade_date, workflow, provider, quick_model, deep_model))
+            return type("Job", (), {"job_id": self.job["job_id"]})()
+
+        def get_job(self, job_id):
+            assert job_id == self.job["job_id"]
+            return self.job
+
+    manager = FakeJobManager()
+    payload = service.queue_single_ticker_run(
+        manager,
+        "SPY",
+        "2026-05-09",
+        provider="opencode",
+        quick_model="opencode/quick",
+        deep_model="opencode/deep",
+    )
+
+    assert manager.calls == [
+        (
+            "SPY",
+            "2026-05-09",
+            service.WORKFLOW_DAILY_COVERAGE,
+            "opencode",
+            "opencode/quick",
+            "opencode/deep",
+        )
+    ]
+    assert payload["job"]["workflow"] == service.WORKFLOW_DAILY_COVERAGE
 
 
 def test_run_job_updates_daily_manifest_with_rating(tmp_path, monkeypatch):
