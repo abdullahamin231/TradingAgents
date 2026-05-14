@@ -1,0 +1,31 @@
+{
+  "source": "seeking_alpha_api",
+  "tickers": [
+    "MU",
+    "SNDK",
+    "MXL",
+    "LITE",
+    "AXTI",
+    "POET",
+    "NVTS",
+    "AMD",
+    "AEHR",
+    "ICHR",
+    "TTMI",
+    "PBR",
+    "FLEX",
+    "PBR.A",
+    "XOM",
+    "ASX",
+    "SNEX",
+    "CRDO",
+    "PACS",
+    "CVX"
+  ],
+  "fetched_at": "2026-05-14T17:14:52.921071Z",
+  "screenshots": [
+    "/home/abdullah/repos/work/algozen/TradingAgents/webui_artifacts/seeking_alpha_watchlist/debug_runs/14-May-2026-10-14-PM/01-screener_results.json"
+  ],
+  "error": null,
+  "stale": false
+}

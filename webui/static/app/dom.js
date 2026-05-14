@@ -9,6 +9,7 @@ export const reportMeta = document.querySelector("#report-meta");
 export const reportFileList = document.querySelector("#report-file-list");
 export const reportView = document.querySelector("#report-view");
 export const dailyWatchlist = document.querySelector("#daily-watchlist");
+export const dailyWatchlistMeta = document.querySelector("#daily-watchlist-meta");
 export const dailyPolicy = document.querySelector("#daily-policy");
 export const dailySummary = document.querySelector("#daily-summary");
 export const dailyStatusTable = document.querySelector("#daily-status-table");
@@ -24,6 +25,7 @@ export const onDemandMessage = document.querySelector("#on-demand-message");
 
 export const dailyPrepareButton = document.querySelector("#prepare-daily-run");
 export const dailyRunMissingButton = document.querySelector("#run-missing-daily");
+export const dailyRescrapeButton = document.querySelector("#rescrape-daily-watchlist");
 export const dailyDateInput = document.querySelector("#daily-date");
 export const dailyMessage = document.querySelector("#daily-message");
 

@@ -220,3 +220,5 @@ __marimo__/
 # Cache
 **/data_cache/
 reports/
+seeking_alpha_cookies.json
+webui_artifacts/seeking_alpha_watchlist/debug_runs/

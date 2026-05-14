@@ -21,6 +21,7 @@ from tradingagents.llm_clients.provider_urls import get_ollama_base_url
 from tradingagents.reporting import save_complete_report
 
 from . import service_daily, service_reports
+from .seeking_alpha import fetch_seeking_alpha_watchlist
 from .service_helpers import PathsConfig, SAVED_REPORT_ID_PATTERN, TOKEN_USAGE_FILENAME, atomic_write_json, markdown_to_html, token_usage_path
 from .service_usage import TokenUsageCollector, get_token_usage_payload, iter_saved_usage_records
 
@@ -146,6 +147,19 @@ def _paths() -> PathsConfig:
     return PathsConfig(repo_root=REPO_ROOT, reports_dir=REPORTS_DIR)
 
 
+def _daily_watchlist_cache_dir() -> Path:
+    return REPO_ROOT / "webui_artifacts" / "seeking_alpha_watchlist"
+
+
+def _resolve_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
+    payload = fetch_seeking_alpha_watchlist(
+        cache_dir=_daily_watchlist_cache_dir(),
+        default_tickers=DEFAULT_DAILY_TICKERS,
+        force_refresh=force_refresh,
+    )
+    return payload.to_payload()
+
+
 def _ensure_reports_layout() -> None:
     service_reports.ensure_reports_layout(_paths(), REPORTS_SYSTEM_DIRS)
 
@@ -241,12 +255,14 @@ def _saved_report_snapshot(ticker: str, trade_date: str) -> dict[str, Any] | Non
 
 
 def _load_daily_manifest(trade_date: str) -> dict[str, Any]:
+    watchlist = _resolve_daily_watchlist()
     return service_daily.load_daily_manifest(
         trade_date,
         reports_dir=REPORTS_DIR,
         dirname=DAILY_RUNS_DIRNAME,
         lock=_daily_manifest_lock,
-        default_daily_tickers=DEFAULT_DAILY_TICKERS,
+        source=str(watchlist["source"]),
+        default_daily_tickers=tuple(watchlist["tickers"]),
         daily_coverage_policy=DAILY_COVERAGE_POLICY,
         snapshot_loader=_saved_report_snapshot,
     )
@@ -361,15 +377,24 @@ def load_report(ticker: str, report_id: str) -> dict[str, Any]:
     return service_reports.load_report(ticker, report_id, _paths(), SAVED_REPORT_ID_PATTERN, _SAVED_REPORT_DOCUMENT_ORDER, _SAVED_REPORT_DOCUMENT_TITLES, _SECTION_TITLES)
 
 
-def get_daily_watchlist() -> dict[str, Any]:
-    return service_daily.get_daily_watchlist(DEFAULT_DAILY_TICKERS, DAILY_COVERAGE_POLICY)
+def get_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
+    watchlist = _resolve_daily_watchlist(force_refresh=force_refresh)
+    metadata = {
+        "fetched_at": watchlist.get("fetched_at"),
+        "screenshots": list(watchlist.get("screenshots", [])),
+        "error": watchlist.get("error"),
+        "stale": bool(watchlist.get("stale", False)),
+    }
+    return service_daily.get_daily_watchlist(str(watchlist["source"]), tuple(watchlist["tickers"]), DAILY_COVERAGE_POLICY, metadata)
 
 
 def prepare_daily_run(trade_date: str) -> dict[str, Any]:
+    watchlist = _resolve_daily_watchlist()
     return service_daily.prepare_daily_run(
         trade_date,
         lock=_daily_manifest_lock,
-        default_daily_tickers=DEFAULT_DAILY_TICKERS,
+        source=str(watchlist["source"]),
+        default_daily_tickers=tuple(watchlist["tickers"]),
         daily_coverage_policy=DAILY_COVERAGE_POLICY,
         manifest_loader=_load_daily_manifest,
         manifest_writer=_write_daily_manifest,

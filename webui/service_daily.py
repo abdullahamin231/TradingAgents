@@ -56,13 +56,14 @@ def write_daily_manifest(
 def new_daily_manifest(
     trade_date: str,
     *,
+    source: str,
     default_daily_tickers: tuple[str, ...],
     daily_coverage_policy: tuple[dict[str, str], ...],
     snapshot_loader: Callable[[str, str], dict[str, Any] | None],
 ) -> dict[str, Any]:
     return {
         "trade_date": trade_date,
-        "source": "hardcoded",
+        "source": source,
         "policy": list(daily_coverage_policy),
         "tickers": [default_daily_entry(ticker, trade_date, snapshot_loader) for ticker in default_daily_tickers],
         "created_at": datetime.utcnow().isoformat() + "Z",
@@ -76,6 +77,7 @@ def load_daily_manifest(
     reports_dir: Path,
     dirname: str,
     lock: RLock,
+    source: str,
     default_daily_tickers: tuple[str, ...],
     daily_coverage_policy: tuple[dict[str, str], ...],
     snapshot_loader: Callable[[str, str], dict[str, Any] | None],
@@ -85,6 +87,7 @@ def load_daily_manifest(
         if not path.exists():
             return new_daily_manifest(
                 trade_date,
+                source=source,
                 default_daily_tickers=default_daily_tickers,
                 daily_coverage_policy=daily_coverage_policy,
                 snapshot_loader=snapshot_loader,
@@ -155,11 +158,12 @@ def update_daily_run_job_state(
         manifest_writer(manifest)
 
 
-def get_daily_watchlist(default_daily_tickers: tuple[str, ...], daily_coverage_policy: tuple[dict[str, str], ...]) -> dict[str, Any]:
+def get_daily_watchlist(source: str, default_daily_tickers: tuple[str, ...], daily_coverage_policy: tuple[dict[str, str], ...], metadata: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
-        "source": "hardcoded",
+        "source": source,
         "tickers": list(default_daily_tickers),
         "policy": list(daily_coverage_policy),
+        "metadata": metadata or {},
     }
 
 
@@ -167,6 +171,7 @@ def prepare_daily_run(
     trade_date: str,
     *,
     lock: RLock,
+    source: str,
     default_daily_tickers: tuple[str, ...],
     daily_coverage_policy: tuple[dict[str, str], ...],
     manifest_loader: Callable[[str], dict[str, Any]],
@@ -177,7 +182,7 @@ def prepare_daily_run(
     with lock:
         manifest = manifest_loader(trade_date)
         manifest["policy"] = list(daily_coverage_policy)
-        manifest["source"] = "hardcoded"
+        manifest["source"] = source
         known = {entry["ticker"]: entry for entry in manifest["tickers"]}
         tickers: list[dict[str, Any]] = []
         for ticker in default_daily_tickers:

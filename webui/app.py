@@ -123,6 +123,11 @@ def daily_watchlist() -> dict:
     return get_daily_watchlist()
 
 
+@app.post("/api/daily-watchlist/refresh")
+def refresh_daily_watchlist() -> dict:
+    return get_daily_watchlist(force_refresh=True)
+
+
 @app.get("/api/daily-runs/{trade_date}")
 def daily_run(trade_date: str) -> dict:
     try:

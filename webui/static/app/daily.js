@@ -3,11 +3,13 @@ import {
   dailyMessage,
   dailyPolicy,
   dailyPrepareButton,
+  dailyRescrapeButton,
   dailyRunMissingButton,
   dailyStatusDate,
   dailyStatusTable,
   dailySummary,
   dailyWatchlist,
+  dailyWatchlistMeta,
 } from "./dom.js";
 import { fetchJobs } from "./jobs.js";
 import { providerPayload } from "./providers.js";
@@ -17,6 +19,13 @@ import { escapeHtml, isValidTradeDate, setMessage, statusClass } from "./utils.j
 export function renderDailyWatchlist(payload) {
   const tickers = payload.tickers || [];
   const policy = payload.policy || [];
+  const metadata = payload.metadata || {};
+  const sourceLabel = (payload.source || "unknown").replaceAll("_", " ");
+  const fetchedAt = metadata.fetched_at ? new Date(metadata.fetched_at).toLocaleString() : "n/a";
+  const freshnessLabel = metadata.stale ? "Last successful refresh" : "Last refresh";
+  dailyWatchlistMeta.textContent = metadata.error
+    ? `Source: ${sourceLabel}. ${freshnessLabel}: ${fetchedAt}. Last error: ${metadata.error}`
+    : `Source: ${sourceLabel}. ${freshnessLabel}: ${fetchedAt}.`;
 
   dailyWatchlist.className = tickers.length ? "ticker-list" : "ticker-list empty-state";
   dailyWatchlist.innerHTML = tickers.length
@@ -120,10 +129,27 @@ export function renderDailyManifest(payload) {
   `;
 }
 
-export async function loadDailyWatchlist() {
-  const response = await fetch("/api/daily-watchlist");
+export async function loadDailyWatchlist({ forceRefresh = false } = {}) {
+  const response = await fetch(forceRefresh ? "/api/daily-watchlist/refresh" : "/api/daily-watchlist", {
+    method: forceRefresh ? "POST" : "GET",
+  });
   const payload = await response.json();
+  if (!response.ok) {
+    setMessage(dailyMessage, payload.detail || "Failed to load daily watchlist.", true);
+    return;
+  }
   renderDailyWatchlist(payload);
+}
+
+export async function rescrapeDailyWatchlist() {
+  dailyRescrapeButton.disabled = true;
+  setMessage(dailyMessage, "");
+  try {
+    await loadDailyWatchlist({ forceRefresh: true });
+    setMessage(dailyMessage, "Rescraped daily tickers from Seeking Alpha.");
+  } finally {
+    dailyRescrapeButton.disabled = false;
+  }
 }
 
 export async function loadDailyManifest(tradeDate, { quiet = false } = {}) {
