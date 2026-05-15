@@ -4,4 +4,5 @@ export const state = {
   activeReportPayload: null,
   currentPortfolio: null,
   currentRebalancePlan: null,
+  lastExecution: null,
 };

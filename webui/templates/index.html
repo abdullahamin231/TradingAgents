@@ -210,7 +210,7 @@
             <section class="control-pane">
               <div class="pane-header">
                 <h1>Portfolio rebalance</h1>
-                <p>Maintain current holdings, generate a daily target portfolio, and prepare broker-ready order intents.</p>
+                <p>1. Pull the live Alpaca paper book. 2. Review the current portfolio. 3. Generate the next 10-stock target allocation from daily coverage. 4. Submit paper orders only after review.</p>
               </div>
 
               <div class="field-grid">
@@ -225,36 +225,25 @@
                     value="{{ today }}"
                   />
                 </label>
-                <label class="field">
-                  <span class="field-label">Total equity</span>
-                  <input id="portfolio-total-equity" type="number" min="1" step="1000" value="100000" />
-                </label>
-                <label class="field">
-                  <span class="field-label">Cash notional</span>
-                  <input id="portfolio-cash-notional" type="number" min="0" step="1000" value="10000" />
-                </label>
-                <label class="field">
-                  <span class="field-label">Max positions</span>
-                  <input id="portfolio-max-positions" type="number" min="1" max="50" step="1" value="10" />
-                </label>
               </div>
 
               <div class="action-row">
-                <button id="portfolio-load-current" type="button">Load current</button>
-                <button id="portfolio-save-current" type="button">Save portfolio</button>
+                <button id="portfolio-sync-broker" type="button">1. Pull Alpaca paper portfolio</button>
+                <button id="portfolio-load-current" type="button">Reload saved portfolio snapshot</button>
+                <button id="portfolio-save-current" type="button">Save edited portfolio snapshot</button>
               </div>
 
               <section class="stack-section">
                 <div class="section-head">
                   <h2>Positions editor</h2>
-                  <p>One line per holding: <code>TICKER, NOTIONAL, WEIGHT, RATING</code>.</p>
+                  <p>Optional manual edits. One line per holding: <code>TICKER, NOTIONAL, WEIGHT, RATING</code>. Save only if you want to override the loaded snapshot.</p>
                 </div>
                 <textarea id="portfolio-positions-input" class="code-editor" spellcheck="false" rows="12" placeholder="AAPL, 25000, 0.25, Hold&#10;MSFT, 25000, 0.25, Underweight"></textarea>
               </section>
 
               <div class="action-row">
-                <button id="portfolio-generate-plan" type="button">Generate plan</button>
-                <button id="portfolio-apply-plan" type="button">Apply target portfolio</button>
+                <button id="portfolio-generate-plan" type="button">2. Generate proposed allocation</button>
+                <button id="portfolio-execute-plan" type="button">3. Place Alpaca paper orders</button>
               </div>
               <p id="portfolio-message" class="message" aria-live="polite"></p>
 
@@ -296,9 +285,26 @@
               <section class="stack-section">
                 <div class="section-head">
                   <h2>Order intents</h2>
-                  <p>Broker-ready market/day order payloads using notional deltas.</p>
+                  <p>Paper-trading instructions derived from the proposed rebalance.</p>
                 </div>
                 <div id="portfolio-order-intents" class="daily-table-shell empty-state">No order intents yet.</div>
+              </section>
+
+              <section class="stack-section">
+                <div class="section-head">
+                  <h2>Proposed allocation</h2>
+                  <p>The post-coverage target portfolio. This is a preview until paper orders are submitted.</p>
+                </div>
+                <div id="portfolio-target-summary" class="summary-strip empty-state">No proposed allocation yet.</div>
+                <div id="portfolio-target-holdings" class="daily-table-shell empty-state">No proposed positions yet.</div>
+              </section>
+
+              <section class="stack-section">
+                <div class="section-head">
+                  <h2>Latest execution</h2>
+                  <p id="portfolio-execution-meta">No paper-trade submission yet.</p>
+                </div>
+                <div id="portfolio-execution-table" class="daily-table-shell empty-state">Submitted Alpaca paper orders will appear here.</div>
               </section>
             </section>
           </div>
@@ -338,6 +344,6 @@
     <script>
       window.TRADINGAGENTS_DEFAULT_DATE = "{{ today }}";
     </script>
-    <script type="module" src="/static/app.js?v=portfolio-tab-2"></script>
+    <script type="module" src="/static/app.js?v=portfolio-tab-3"></script>
   </body>
 </html>

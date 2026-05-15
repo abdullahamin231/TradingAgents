@@ -23,9 +23,9 @@ RATING_TO_SCORE = {
 }
 RATING_TO_WEIGHT_MULTIPLIER = {
     "Buy": 1.0,
-    "Overweight": 0.7,
+    "Overweight": 0.9,
     "Hold": 1.0,
-    "Underweight": 1.3,
+    "Underweight": 1.1,
     "Sell": 0.0,
 }
 
@@ -46,6 +46,10 @@ class PortfolioPaths:
     @property
     def rebalances_dir(self) -> Path:
         return self.root / "rebalances"
+
+    @property
+    def executions_dir(self) -> Path:
+        return self.root / "executions"
 
 
 def _utcnow() -> str:
@@ -78,6 +82,7 @@ def default_portfolio_state(total_equity: float = DEFAULT_PORTFOLIO_TOTAL_EQUITY
         "total_equity": total,
         "cash_notional": total,
         "positions": [],
+        "broker": None,
         "source": "paper",
         "updated_at": _utcnow(),
     }
@@ -114,6 +119,7 @@ def load_portfolio_state(paths: PortfolioPaths, total_equity: float = DEFAULT_PO
         "total_equity": total,
         "cash_notional": cash,
         "positions": positions,
+        "broker": payload.get("broker") if isinstance(payload.get("broker"), dict) else None,
         "source": payload.get("source") or "paper",
         "updated_at": payload.get("updated_at"),
     }
@@ -238,6 +244,13 @@ def build_rebalance_plan(
         current_notional = item["current_notional"]
         delta_notional = _round_money(target_notional - current_notional)
         side = "buy" if delta_notional > 0.01 else "sell" if delta_notional < -0.01 else "hold"
+        current_shares = item.get("shares")
+        estimated_sell_qty = None
+        if side == "sell" and isinstance(current_shares, (int, float)) and current_shares > 0 and current_notional > 0:
+            estimated_sell_qty = round(
+                min(float(current_shares), float(current_shares) * abs(delta_notional) / current_notional),
+                6,
+            )
         target_positions.append(
             {
                 **item,
@@ -245,6 +258,7 @@ def build_rebalance_plan(
                 "target_weight": round(target_weight, 6),
                 "target_notional": target_notional,
                 "delta_notional": delta_notional,
+                "estimated_sell_qty": estimated_sell_qty,
                 "rebalance_action": side,
             }
         )
@@ -262,12 +276,14 @@ def build_rebalance_plan(
             "delta_notional": item["delta_notional"],
             "rating": item["rating"],
             "report_path": item["report_path"],
+            "estimated_sell_qty": item["estimated_sell_qty"],
             "broker_payload": {
                 "symbol": item["ticker"],
                 "side": item["rebalance_action"],
                 "order_type": "market",
                 "time_in_force": "day",
                 "notional_delta": abs(item["delta_notional"]),
+                "estimated_sell_qty": item["estimated_sell_qty"],
             },
         }
         for item in target_positions
@@ -336,3 +352,9 @@ def apply_rebalance_plan(paths: PortfolioPaths, plan: dict[str, Any]) -> dict[st
         "updated_at": _utcnow(),
     }
     return write_portfolio_state(paths, state)
+
+
+def write_execution_result(paths: PortfolioPaths, execution: dict[str, Any]) -> dict[str, Any]:
+    paths.executions_dir.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(paths.executions_dir / f"{execution['execution_id']}.json", execution)
+    return execution

@@ -20,8 +20,7 @@ from tradingagents.llm_clients.model_catalog import get_model_options
 from tradingagents.llm_clients.provider_urls import get_ollama_base_url
 from tradingagents.reporting import save_complete_report
 
-from . import service_daily, service_reports
-from . import service_portfolio
+from . import service_alpaca, service_daily, service_portfolio, service_reports
 from .seeking_alpha import fetch_seeking_alpha_watchlist
 from .service_helpers import PathsConfig, SAVED_REPORT_ID_PATTERN, TOKEN_USAGE_FILENAME, atomic_write_json, markdown_to_html, token_usage_path
 from .service_usage import TokenUsageCollector, get_token_usage_payload, iter_saved_usage_records
@@ -431,6 +430,8 @@ def update_portfolio_state(payload: dict[str, Any]) -> dict[str, Any]:
     state = service_portfolio.default_portfolio_state(total_equity)
     state["as_of"] = payload.get("as_of")
     state["source"] = payload.get("source") or "paper"
+    broker_payload = payload.get("broker")
+    state["broker"] = broker_payload if isinstance(broker_payload, dict) else None
     positions: list[dict[str, Any]] = []
     for item in payload.get("positions", []):
         if not isinstance(item, dict):
@@ -452,6 +453,11 @@ def update_portfolio_state(payload: dict[str, Any]) -> dict[str, Any]:
     state["positions"] = positions
     state["cash_notional"] = round(float(payload.get("cash_notional", max(state["total_equity"] - sum(position["current_notional"] for position in positions), 0.0)) or 0.0), 2)
     return service_portfolio.write_portfolio_state(_portfolio_paths(), state)
+
+
+def sync_alpaca_paper_portfolio() -> dict[str, Any]:
+    snapshot = service_alpaca.get_account_snapshot()
+    return update_portfolio_state(snapshot)
 
 
 def build_daily_rebalance_plan(
@@ -485,6 +491,31 @@ def build_daily_rebalance_plan(
         updated_state = service_portfolio.apply_rebalance_plan(_portfolio_paths(), plan)
         plan = {**plan, "applied": True, "target_portfolio": updated_state}
     return plan
+
+
+def execute_daily_rebalance_plan(
+    trade_date: str,
+    *,
+    total_equity: float | None = None,
+    max_positions: int = service_portfolio.DEFAULT_TARGET_POSITION_COUNT,
+) -> dict[str, Any]:
+    plan = build_daily_rebalance_plan(
+        trade_date,
+        total_equity=total_equity,
+        max_positions=max_positions,
+        apply_targets=False,
+    )
+    if not plan["ready"]:
+        raise ValueError("Daily rebalance plan is not ready because required analysis is still pending.")
+
+    execution = service_alpaca.submit_rebalance_orders(
+        plan.get("order_intents", []),
+        current_portfolio=plan.get("current_portfolio", {}),
+        trade_date=trade_date,
+    )
+    result = {**execution, "plan": plan}
+    service_portfolio.write_execution_result(_portfolio_paths(), result)
+    return result
 
 
 def queue_daily_run_entries(

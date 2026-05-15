@@ -1,12 +1,12 @@
 import {
-  portfolioApplyPlanButton,
-  portfolioCashNotionalInput,
   portfolioCurrentHoldings,
   portfolioCurrentMeta,
   portfolioCurrentSummary,
+  portfolioExecutePlanButton,
+  portfolioExecutionMeta,
+  portfolioExecutionTable,
   portfolioGeneratePlanButton,
   portfolioLoadCurrentButton,
-  portfolioMaxPositionsInput,
   portfolioMessage,
   portfolioOrderIntents,
   portfolioPlanMeta,
@@ -15,11 +15,15 @@ import {
   portfolioRankingTable,
   portfolioSaveCurrentButton,
   portfolioSelectedTickers,
-  portfolioTotalEquityInput,
+  portfolioSyncBrokerButton,
+  portfolioTargetHoldings,
+  portfolioTargetSummary,
   portfolioTradeDateInput,
-} from "./dom.js?v=portfolio-tab-2";
-import { state } from "./state.js?v=portfolio-tab-2";
-import { escapeHtml, formatCurrency, formatDateTime, formatPercent, isValidTradeDate, setMessage, statusClass } from "./utils.js?v=portfolio-tab-2";
+} from "./dom.js?v=portfolio-tab-3";
+import { state } from "./state.js?v=portfolio-tab-3";
+import { escapeHtml, formatCurrency, formatDateTime, formatPercent, isValidTradeDate, setMessage, statusClass } from "./utils.js?v=portfolio-tab-3";
+
+const FIXED_MAX_POSITIONS = 10;
 
 function parsePositionsInput() {
   const lines = portfolioPositionsInput.value
@@ -59,8 +63,6 @@ function renderPositionsInput(positions = []) {
 function renderCurrentPortfolio(payload) {
   state.currentPortfolio = payload;
   portfolioTradeDateInput.value = payload.as_of || portfolioTradeDateInput.value || window.TRADINGAGENTS_DEFAULT_DATE;
-  portfolioTotalEquityInput.value = Number(payload.total_equity || 100000);
-  portfolioCashNotionalInput.value = Number(payload.cash_notional || 0);
   renderPositionsInput(
     (payload.positions || []).map((position) => ({
       ticker: position.ticker,
@@ -74,11 +76,13 @@ function renderCurrentPortfolio(payload) {
     ? `Updated ${formatDateTime(payload.updated_at)} from ${payload.source || "paper"}.`
     : `Source: ${payload.source || "paper"}.`;
 
+  const broker = payload.broker || null;
   portfolioCurrentSummary.className = "summary-strip";
   portfolioCurrentSummary.innerHTML = [
     ["As of", escapeHtml(payload.as_of || "n/a")],
     ["Equity", escapeHtml(formatCurrency(payload.total_equity))],
     ["Cash", escapeHtml(formatCurrency(payload.cash_notional))],
+    ["Buying power", escapeHtml(formatCurrency(broker?.buying_power || 0))],
     ["Positions", escapeHtml(String((payload.positions || []).length))],
   ]
     .map(
@@ -104,6 +108,7 @@ function renderCurrentPortfolio(payload) {
       <thead>
         <tr>
           <th>Ticker</th>
+          <th>Shares</th>
           <th>Notional</th>
           <th>Weight</th>
           <th>Last rating</th>
@@ -115,6 +120,7 @@ function renderCurrentPortfolio(payload) {
             (position) => `
               <tr>
                 <td><strong>${escapeHtml(position.ticker)}</strong></td>
+                <td>${escapeHtml(position.shares ?? "n/a")}</td>
                 <td>${escapeHtml(formatCurrency(position.current_notional))}</td>
                 <td>${escapeHtml(formatPercent(position.current_weight))}</td>
                 <td>${escapeHtml(position.last_rating || "Hold")}</td>
@@ -147,7 +153,8 @@ function renderPlanSummary(plan) {
     ["Selected", String((plan.selected_tickers || []).length)],
     ["Orders", String((plan.order_intents || []).length)],
     ["Equity", formatCurrency(plan.total_equity)],
-    ["Max positions", String(plan.max_positions || 0)],
+    ["Target names", String(plan.max_positions || FIXED_MAX_POSITIONS)],
+    ["Sizing", "Equal weight +/- 10%"],
   ]
     .map(
       ([label, value]) => `
@@ -228,6 +235,7 @@ function renderOrderIntents(plan) {
           <th>Ticker</th>
           <th>Side</th>
           <th>Delta</th>
+          <th>Sell qty</th>
           <th>Target weight</th>
           <th>Broker payload</th>
         </tr>
@@ -240,6 +248,7 @@ function renderOrderIntents(plan) {
                 <td><strong>${escapeHtml(order.ticker)}</strong></td>
                 <td><span class="${statusClass(order.side)}">${escapeHtml(order.side)}</span></td>
                 <td>${escapeHtml(formatCurrency(order.delta_notional))}</td>
+                <td>${escapeHtml(order.estimated_sell_qty ?? "n/a")}</td>
                 <td>${escapeHtml(formatPercent(order.target_weight))}</td>
                 <td><code class="report-path-value">${escapeHtml(JSON.stringify(order.broker_payload))}</code></td>
               </tr>
@@ -256,6 +265,119 @@ function renderRebalancePlan(plan) {
   renderSelectedTickers(plan);
   renderRankingTable(plan);
   renderOrderIntents(plan);
+  renderTargetPortfolio(plan.target_portfolio);
+}
+
+function selectedTotalEquity() {
+  const portfolioEquity = Number(state.currentPortfolio?.total_equity || 0);
+  return portfolioEquity > 0 ? portfolioEquity : null;
+}
+
+function renderTargetPortfolio(targetPortfolio) {
+  const positions = targetPortfolio?.positions || [];
+  if (!targetPortfolio) {
+    portfolioTargetSummary.className = "summary-strip empty-state";
+    portfolioTargetSummary.textContent = "No proposed allocation yet.";
+    portfolioTargetHoldings.className = "daily-table-shell empty-state";
+    portfolioTargetHoldings.textContent = "No proposed positions yet.";
+    return;
+  }
+
+  portfolioTargetSummary.className = "summary-strip";
+  portfolioTargetSummary.innerHTML = [
+    ["Trade date", targetPortfolio.as_of || "n/a"],
+    ["Target equity", formatCurrency(targetPortfolio.total_equity)],
+    ["Target cash", formatCurrency(targetPortfolio.cash_notional)],
+    ["Target names", String(positions.length)],
+  ]
+    .map(
+      ([label, value]) => `
+        <div class="summary-item">
+          <span class="table-label">${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </div>
+      `
+    )
+    .join("");
+
+  if (!positions.length) {
+    portfolioTargetHoldings.className = "daily-table-shell empty-state";
+    portfolioTargetHoldings.textContent = "No proposed positions yet.";
+    return;
+  }
+
+  portfolioTargetHoldings.className = "daily-table-shell";
+  portfolioTargetHoldings.innerHTML = `
+    <table class="daily-table">
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Target notional</th>
+          <th>Target weight</th>
+          <th>Rating</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${positions
+          .map(
+            (position) => `
+              <tr>
+                <td><strong>${escapeHtml(position.ticker)}</strong></td>
+                <td>${escapeHtml(formatCurrency(position.current_notional))}</td>
+                <td>${escapeHtml(formatPercent(position.current_weight))}</td>
+                <td>${escapeHtml(position.last_rating || "Hold")}</td>
+              </tr>
+            `
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderExecutionResult(execution) {
+  state.lastExecution = execution;
+  if (!execution) {
+    portfolioExecutionMeta.textContent = "No paper-trade submission yet.";
+    portfolioExecutionTable.className = "daily-table-shell empty-state";
+    portfolioExecutionTable.textContent = "Submitted Alpaca paper orders will appear here.";
+    return;
+  }
+
+  portfolioExecutionMeta.textContent = `Submitted ${execution.submitted_order_count || 0} Alpaca paper orders on ${formatDateTime(execution.submitted_at)}.`;
+  const orders = execution.submitted_orders || [];
+  portfolioExecutionTable.className = orders.length ? "daily-table-shell" : "daily-table-shell empty-state";
+  if (!orders.length) {
+    portfolioExecutionTable.textContent = "No submitted orders returned.";
+    return;
+  }
+
+  portfolioExecutionTable.innerHTML = `
+    <table class="daily-table">
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Side</th>
+          <th>Status</th>
+          <th>Submitted payload</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${orders
+          .map(
+            (order) => `
+              <tr>
+                <td><strong>${escapeHtml(order.ticker)}</strong></td>
+                <td><span class="${statusClass(order.side)}">${escapeHtml(order.side)}</span></td>
+                <td>${escapeHtml(order.alpaca_status || "submitted")}</td>
+                <td><code class="report-path-value">${escapeHtml(JSON.stringify(order.submitted_payload || {}))}</code></td>
+              </tr>
+            `
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
 }
 
 export async function loadCurrentPortfolio({ quiet = false } = {}) {
@@ -279,12 +401,16 @@ export async function loadCurrentPortfolio({ quiet = false } = {}) {
 export async function saveCurrentPortfolio() {
   try {
     const positions = parsePositionsInput();
+    const positionsNotional = positions.reduce((sum, position) => sum + Number(position.current_notional || 0), 0);
+    const totalEquity = Number(state.currentPortfolio?.total_equity || positionsNotional);
+    const cashNotional = Number(state.currentPortfolio?.cash_notional || Math.max(totalEquity - positionsNotional, 0));
     const payload = {
       as_of: portfolioTradeDateInput.value.trim() || null,
-      total_equity: Number(portfolioTotalEquityInput.value || 0),
-      cash_notional: Number(portfolioCashNotionalInput.value || 0),
+      total_equity: totalEquity,
+      cash_notional: cashNotional,
       positions,
       source: "paper_ui",
+      broker: state.currentPortfolio?.broker || null,
     };
     const response = await fetch("/api/portfolio/current", {
       method: "PUT",
@@ -303,7 +429,7 @@ export async function saveCurrentPortfolio() {
   }
 }
 
-async function requestRebalancePlan(applyTargets) {
+async function requestRebalancePlan() {
   const tradeDate = portfolioTradeDateInput.value.trim();
   if (!isValidTradeDate(tradeDate)) {
     setMessage(portfolioMessage, "Date must use YYYY-MM-DD.", true);
@@ -315,9 +441,9 @@ async function requestRebalancePlan(applyTargets) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        total_equity: Number(portfolioTotalEquityInput.value || 0),
-        max_positions: Number(portfolioMaxPositionsInput.value || 10),
-        apply_targets: applyTargets,
+        total_equity: selectedTotalEquity(),
+        max_positions: FIXED_MAX_POSITIONS,
+        apply_targets: false,
       }),
     });
     const payload = await response.json();
@@ -326,13 +452,7 @@ async function requestRebalancePlan(applyTargets) {
       return;
     }
     renderRebalancePlan(payload);
-    if (payload.target_portfolio) {
-      renderCurrentPortfolio(payload.target_portfolio);
-    }
-    setMessage(
-      portfolioMessage,
-      applyTargets ? "Applied target portfolio snapshot." : "Generated rebalance plan."
-    );
+    setMessage(portfolioMessage, "Generated rebalance plan.");
   } catch (error) {
     setMessage(portfolioMessage, error.message || "Failed to generate rebalance plan.", true);
   }
@@ -341,24 +461,71 @@ async function requestRebalancePlan(applyTargets) {
 export async function generateRebalancePlan() {
   portfolioGeneratePlanButton.disabled = true;
   try {
-    await requestRebalancePlan(false);
+    await requestRebalancePlan();
   } finally {
     portfolioGeneratePlanButton.disabled = false;
   }
 }
 
-export async function applyRebalancePlan() {
-  portfolioApplyPlanButton.disabled = true;
+export async function syncBrokerPortfolio() {
+  portfolioSyncBrokerButton.disabled = true;
   try {
-    await requestRebalancePlan(true);
+    const response = await fetch("/api/portfolio/alpaca-paper/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setMessage(portfolioMessage, payload.detail || "Failed to sync Alpaca paper portfolio.", true);
+      return;
+    }
+    renderCurrentPortfolio(payload);
+    setMessage(portfolioMessage, "Synced live Alpaca paper portfolio.");
+  } catch (error) {
+    setMessage(portfolioMessage, error.message || "Failed to sync Alpaca paper portfolio.", true);
   } finally {
-    portfolioApplyPlanButton.disabled = false;
+    portfolioSyncBrokerButton.disabled = false;
+  }
+}
+
+export async function executeRebalancePlan() {
+  const tradeDate = portfolioTradeDateInput.value.trim();
+  if (!isValidTradeDate(tradeDate)) {
+    setMessage(portfolioMessage, "Date must use YYYY-MM-DD.", true);
+    return;
+  }
+
+  portfolioExecutePlanButton.disabled = true;
+  try {
+    const response = await fetch(`/api/daily-runs/${encodeURIComponent(tradeDate)}/rebalance-execution`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        total_equity: selectedTotalEquity(),
+        max_positions: FIXED_MAX_POSITIONS,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setMessage(portfolioMessage, payload.detail || "Failed to submit Alpaca paper orders.", true);
+      return;
+    }
+    if (payload.plan) {
+      renderRebalancePlan(payload.plan);
+    }
+    renderExecutionResult(payload);
+    setMessage(portfolioMessage, `Submitted ${payload.submitted_order_count || 0} Alpaca paper orders.`);
+  } catch (error) {
+    setMessage(portfolioMessage, error.message || "Failed to submit Alpaca paper orders.", true);
+  } finally {
+    portfolioExecutePlanButton.disabled = false;
   }
 }
 
 export function bindPortfolioActions() {
   portfolioLoadCurrentButton.addEventListener("click", () => loadCurrentPortfolio());
+  portfolioSyncBrokerButton.addEventListener("click", syncBrokerPortfolio);
   portfolioSaveCurrentButton.addEventListener("click", saveCurrentPortfolio);
   portfolioGeneratePlanButton.addEventListener("click", generateRebalancePlan);
-  portfolioApplyPlanButton.addEventListener("click", applyRebalancePlan);
+  portfolioExecutePlanButton.addEventListener("click", executeRebalancePlan);
 }
