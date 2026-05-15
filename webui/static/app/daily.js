@@ -9,15 +9,80 @@ import {
   dailyStatusTable,
   dailySummary,
   dailyWatchlist,
+  dailyWatchlistDiff,
+  dailyWatchlistHoldings,
   dailyWatchlistMeta,
-} from "./dom.js";
-import { fetchJobs } from "./jobs.js";
-import { providerPayload } from "./providers.js";
-import { state } from "./state.js";
-import { escapeHtml, isValidTradeDate, setMessage, statusClass } from "./utils.js";
+} from "./dom.js?v=portfolio-tab-5";
+import { fetchJobs } from "./jobs.js?v=portfolio-tab-5";
+import { providerPayload } from "./providers.js?v=portfolio-tab-5";
+import { state } from "./state.js?v=portfolio-tab-5";
+import { escapeHtml, isValidTradeDate, setMessage, statusClass } from "./utils.js?v=portfolio-tab-5";
+
+function uniqueTickers(tickers) {
+  return [...new Set((tickers || []).filter((ticker) => typeof ticker === "string" && ticker))];
+}
+
+function diffTickers(previousTickers, nextTickers) {
+  const previous = new Set(uniqueTickers(previousTickers));
+  const next = new Set(uniqueTickers(nextTickers));
+  return {
+    added: [...next].filter((ticker) => !previous.has(ticker)),
+    removed: [...previous].filter((ticker) => !next.has(ticker)),
+  };
+}
+
+function renderTickerChips(tickers, className = "ticker-chip") {
+  return tickers.map((ticker) => `<span class="${className}">${escapeHtml(ticker)}</span>`).join("");
+}
+
+function renderWatchlistHoldings(metadata = {}, tickers = []) {
+  const existingHoldings = uniqueTickers(metadata.existing_holdings || []);
+  const holdingsOutsideWatchlist = existingHoldings.filter((ticker) => !tickers.includes(ticker));
+  if (!holdingsOutsideWatchlist.length) {
+    dailyWatchlistHoldings.className = "watchlist-note empty-state";
+    dailyWatchlistHoldings.textContent = "All current holdings are already present in the live watchlist.";
+    return;
+  }
+
+  dailyWatchlistHoldings.className = "watchlist-note";
+  dailyWatchlistHoldings.innerHTML = `
+    <strong>Held outside live watchlist</strong>
+    <p>These are not in the latest rescrape, but they still get added to the daily coverage manifest because they are current holdings.</p>
+    <div class="ticker-list ticker-list-inline">
+      ${renderTickerChips(holdingsOutsideWatchlist, "ticker-chip ticker-chip-held")}
+    </div>
+  `;
+}
+
+function renderWatchlistDiff(diff = null) {
+  if (!diff || (!diff.added.length && !diff.removed.length)) {
+    dailyWatchlistDiff.className = "watchlist-diff empty-state";
+    dailyWatchlistDiff.textContent = diff ? "Last rescrape did not change the ticker list." : "Rescrape tickers to see additions and removals.";
+    return;
+  }
+
+  dailyWatchlistDiff.className = "watchlist-diff";
+  dailyWatchlistDiff.innerHTML = `
+    <strong>Last rescrape changes</strong>
+    <div class="watchlist-diff-grid">
+      <div class="watchlist-diff-group">
+        <span class="watchlist-diff-label watchlist-diff-label-added">Added</span>
+        <div class="ticker-list ticker-list-inline">
+          ${diff.added.length ? renderTickerChips(diff.added, "ticker-chip ticker-chip-added") : '<span class="empty-state">None</span>'}
+        </div>
+      </div>
+      <div class="watchlist-diff-group">
+        <span class="watchlist-diff-label watchlist-diff-label-removed">Removed</span>
+        <div class="ticker-list ticker-list-inline">
+          ${diff.removed.length ? renderTickerChips(diff.removed, "ticker-chip ticker-chip-removed") : '<span class="empty-state">None</span>'}
+        </div>
+      </div>
+    </div>
+  `;
+}
 
 export function renderDailyWatchlist(payload) {
-  const tickers = payload.tickers || [];
+  const tickers = uniqueTickers(payload.tickers || []);
   const policy = payload.policy || [];
   const metadata = payload.metadata || {};
   const sourceLabel = (payload.source || "unknown").replaceAll("_", " ");
@@ -29,8 +94,10 @@ export function renderDailyWatchlist(payload) {
 
   dailyWatchlist.className = tickers.length ? "ticker-list" : "ticker-list empty-state";
   dailyWatchlist.innerHTML = tickers.length
-    ? tickers.map((ticker) => `<span class="ticker-chip">${escapeHtml(ticker)}</span>`).join("")
+    ? renderTickerChips(tickers)
     : "No watchlist configured.";
+  renderWatchlistHoldings(metadata, tickers);
+  renderWatchlistDiff(state.dailyWatchlistDiff);
 
   dailyPolicy.className = policy.length ? "policy-list" : "policy-list empty-state";
   dailyPolicy.innerHTML = policy.length
@@ -45,6 +112,7 @@ export function renderDailyWatchlist(payload) {
         )
         .join("")
     : "No policy configured.";
+  state.dailyWatchlistPayload = payload;
 }
 
 export function renderDailySummary(summary = null) {
@@ -130,6 +198,7 @@ export function renderDailyManifest(payload) {
 }
 
 export async function loadDailyWatchlist({ forceRefresh = false } = {}) {
+  const previousPayload = state.dailyWatchlistPayload;
   const response = await fetch(forceRefresh ? "/api/daily-watchlist/refresh" : "/api/daily-watchlist", {
     method: forceRefresh ? "POST" : "GET",
   });
@@ -138,6 +207,9 @@ export async function loadDailyWatchlist({ forceRefresh = false } = {}) {
     setMessage(dailyMessage, payload.detail || "Failed to load daily watchlist.", true);
     return;
   }
+  state.dailyWatchlistDiff = forceRefresh && previousPayload
+    ? diffTickers(previousPayload.tickers || [], payload.tickers || [])
+    : null;
   renderDailyWatchlist(payload);
 }
 
@@ -146,7 +218,15 @@ export async function rescrapeDailyWatchlist() {
   setMessage(dailyMessage, "");
   try {
     await loadDailyWatchlist({ forceRefresh: true });
-    setMessage(dailyMessage, "Rescraped daily tickers from Seeking Alpha.");
+    const diff = state.dailyWatchlistDiff;
+    const addedCount = diff?.added.length || 0;
+    const removedCount = diff?.removed.length || 0;
+    setMessage(
+      dailyMessage,
+      addedCount || removedCount
+        ? `Rescraped daily tickers from Seeking Alpha. Added ${addedCount}, removed ${removedCount}.`
+        : "Rescraped daily tickers from Seeking Alpha. No ticker changes."
+    );
   } finally {
     dailyRescrapeButton.disabled = false;
   }

@@ -1,5 +1,5 @@
-import { jobsList } from "./dom.js";
-import { escapeHtml, statusClass } from "./utils.js";
+import { jobsList } from "./dom.js?v=portfolio-tab-5";
+import { escapeHtml, statusClass } from "./utils.js?v=portfolio-tab-5";
 
 export function renderJobs(jobs) {
   if (!jobs.length) {

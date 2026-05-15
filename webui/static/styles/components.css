@@ -77,7 +77,9 @@
 .report-meta-item,
 .usage-card,
 .usage-chart-card,
-.portfolio-banner {
+.portfolio-banner,
+.watchlist-note,
+.watchlist-diff {
   background: var(--bg-soft);
   padding: 0.85rem;
 }
@@ -141,6 +143,31 @@
   font-size: 0.88rem;
 }
 
+.ticker-list-inline {
+  margin-top: 0.65rem;
+}
+
+.ticker-chip-added,
+.ticker-chip-held,
+.ticker-chip-removed {
+  border: 1px solid transparent;
+}
+
+.ticker-chip-added {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.ticker-chip-held {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.ticker-chip-removed {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 .summary-item strong,
 .report-meta-item strong {
   font-size: 0.95rem;
@@ -177,6 +204,50 @@
 .portfolio-banner {
   gap: 0.35rem;
   border-left: 3px solid var(--line);
+}
+
+.watchlist-note,
+.watchlist-diff {
+  margin-top: 0.75rem;
+}
+
+.watchlist-note strong,
+.watchlist-diff strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.watchlist-note p {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.watchlist-diff-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.75rem;
+}
+
+.watchlist-diff-group {
+  min-width: 0;
+}
+
+.watchlist-diff-label {
+  display: inline-block;
+  margin-bottom: 0.25rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.watchlist-diff-label-added {
+  color: var(--success);
+}
+
+.watchlist-diff-label-removed {
+  color: var(--danger);
 }
 
 .portfolio-banner strong {

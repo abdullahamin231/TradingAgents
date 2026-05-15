@@ -7,7 +7,9 @@
   --text: #e0e0e0;
   --muted: #555555;
   --accent: #3b82f6;
-  --danger: #e0e0e0;
+  --success: #2fbf71;
+  --danger: #e35d6a;
+  --warning: #e0b04b;
 }
 
 * {

@@ -17,16 +17,16 @@ import {
   reportSelect,
   tabButtons,
   tickerSelect,
-} from "./dom.js?v=portfolio-tab-3";
-import { loadDailyManifest, loadDailyWatchlist, prepareDailyRun, rescrapeDailyWatchlist, retryDailyTicker, runMissingDaily } from "./daily.js";
-import { fetchJobs } from "./jobs.js";
-import { submitOnDemandRun } from "./on-demand.js";
-import { bindPortfolioActions, loadCurrentPortfolio } from "./portfolio.js?v=portfolio-tab-3";
-import { loadProviders, updateModelDefault } from "./providers.js";
-import { loadReport, loadReportsForTicker, loadTickers, renderReportDocument } from "./reports.js";
-import { state } from "./state.js?v=portfolio-tab-3";
-import { loadTokenUsage } from "./token-usage.js";
-import { setMessage, setTab } from "./utils.js?v=portfolio-tab-3";
+} from "./dom.js?v=portfolio-tab-5";
+import { loadDailyManifest, loadDailyWatchlist, prepareDailyRun, rescrapeDailyWatchlist, retryDailyTicker, runMissingDaily } from "./daily.js?v=portfolio-tab-5";
+import { fetchJobs } from "./jobs.js?v=portfolio-tab-5";
+import { submitOnDemandRun } from "./on-demand.js?v=portfolio-tab-5";
+import { bindPortfolioActions, loadCurrentPortfolio } from "./portfolio.js?v=portfolio-tab-5";
+import { loadProviders, updateModelDefault } from "./providers.js?v=portfolio-tab-5";
+import { loadReport, loadReportsForTicker, loadTickers, renderReportDocument } from "./reports.js?v=portfolio-tab-5";
+import { state } from "./state.js?v=portfolio-tab-5";
+import { loadTokenUsage } from "./token-usage.js?v=portfolio-tab-5";
+import { setMessage, setTab } from "./utils.js?v=portfolio-tab-5";
 
 function registerEventHandlers() {
   tabButtons.forEach((button) => {

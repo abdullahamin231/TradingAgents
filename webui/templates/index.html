@@ -138,6 +138,8 @@
                   <button id="rescrape-daily-watchlist" type="button">Rescrape tickers</button>
                 </div>
                 <div id="daily-watchlist" class="ticker-list empty-state">Loading watchlist...</div>
+                <div id="daily-watchlist-holdings" class="watchlist-note empty-state">Loading holdings context...</div>
+                <div id="daily-watchlist-diff" class="watchlist-diff empty-state">Rescrape tickers to see additions and removals.</div>
               </section>
 
               <section class="stack-section">
@@ -344,6 +346,6 @@
     <script>
       window.TRADINGAGENTS_DEFAULT_DATE = "{{ today }}";
     </script>
-    <script type="module" src="/static/app.js?v=portfolio-tab-3"></script>
+    <script type="module" src="/static/app.js?v=portfolio-tab-5"></script>
   </body>
 </html>

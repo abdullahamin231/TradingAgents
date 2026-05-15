@@ -1,4 +1,4 @@
-import { tabButtons, tabPanels } from "./dom.js";
+import { tabButtons, tabPanels } from "./dom.js?v=portfolio-tab-5";
 
 export const usageMetrics = [
   ["tokens_total", "Total Tokens"],

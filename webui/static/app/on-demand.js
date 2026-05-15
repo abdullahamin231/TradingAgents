@@ -1,8 +1,8 @@
-import { onDemandDateInput, onDemandMessage, onDemandSubmitButton, onDemandTickerInput } from "./dom.js";
-import { fetchJobs } from "./jobs.js";
-import { loadTickers } from "./reports.js";
-import { providerPayload } from "./providers.js";
-import { isValidTradeDate, setMessage } from "./utils.js";
+import { onDemandDateInput, onDemandMessage, onDemandSubmitButton, onDemandTickerInput } from "./dom.js?v=portfolio-tab-5";
+import { fetchJobs } from "./jobs.js?v=portfolio-tab-5";
+import { loadTickers } from "./reports.js?v=portfolio-tab-5";
+import { providerPayload } from "./providers.js?v=portfolio-tab-5";
+import { isValidTradeDate, setMessage } from "./utils.js?v=portfolio-tab-5";
 
 export async function submitOnDemandRun() {
   const tradeDate = onDemandDateInput.value.trim();
