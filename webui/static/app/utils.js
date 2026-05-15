@@ -40,6 +40,18 @@ export function formatNumber(value) {
   return new Intl.NumberFormat("en-US").format(Number(value || 0));
 }
 
+export function formatCurrency(value) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
+}
+
+export function formatPercent(value) {
+  return `${(Number(value || 0) * 100).toFixed(2).replace(/\.00$/, "")}%`;
+}
+
 export function formatDecimal(value) {
   const numeric = Number(value || 0);
   return numeric ? numeric.toFixed(6).replace(/0+$/, "").replace(/\.$/, "") : "0";

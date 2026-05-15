@@ -73,7 +73,8 @@
 .report-meta-item,
 .usage-chart-head,
 .usage-grid,
-.usage-chart-grid {
+.usage-chart-grid,
+.portfolio-banner {
   display: grid;
 }
 
@@ -153,6 +154,10 @@
   overflow: auto;
   flex: 1;
   background: var(--bg-soft);
+}
+
+.code-editor {
+  min-height: 18rem;
 }
 
 .report-pane {

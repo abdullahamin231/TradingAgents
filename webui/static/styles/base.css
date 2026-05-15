@@ -30,6 +30,7 @@ body {
 button,
 input,
 select,
+textarea,
 code,
 pre {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
@@ -41,7 +42,8 @@ code {
 
 button,
 input,
-select {
+select,
+textarea {
   margin: 0;
   border-radius: 0;
   box-shadow: none;
@@ -49,7 +51,8 @@ select {
 
 button,
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 2.25rem;
   padding: 0.55rem 0.7rem;
@@ -67,7 +70,8 @@ button {
 
 button:hover,
 input:hover,
-select:hover {
+select:hover,
+textarea:hover {
   background: #2a2a2a;
 }
 
@@ -78,10 +82,15 @@ button:disabled {
 
 button:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: 0;
   border-color: var(--accent);
+}
+
+textarea {
+  resize: vertical;
 }
 
 a {

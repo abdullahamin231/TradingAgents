@@ -14,6 +14,7 @@
           <div class="tab-list" aria-label="Primary">
             <button class="tab-button active" type="button" data-tab-target="on-demand">On-Demand</button>
             <button class="tab-button" type="button" data-tab-target="daily-coverage">Daily Coverage</button>
+            <button class="tab-button" type="button" data-tab-target="portfolio-rebalance">Portfolio</button>
             <button class="tab-button" type="button" data-tab-target="saved-reports">Saved Reports</button>
             <button class="tab-button" type="button" data-tab-target="token-usage">Token Usage</button>
           </div>
@@ -204,6 +205,105 @@
           </div>
         </section>
 
+        <section id="portfolio-rebalance" class="tab-panel">
+          <div class="workspace">
+            <section class="control-pane">
+              <div class="pane-header">
+                <h1>Portfolio rebalance</h1>
+                <p>Maintain current holdings, generate a daily target portfolio, and prepare broker-ready order intents.</p>
+              </div>
+
+              <div class="field-grid">
+                <label class="field">
+                  <span class="field-label">Trade date</span>
+                  <input
+                    id="portfolio-trade-date"
+                    type="text"
+                    inputmode="numeric"
+                    spellcheck="false"
+                    placeholder="YYYY-MM-DD"
+                    value="{{ today }}"
+                  />
+                </label>
+                <label class="field">
+                  <span class="field-label">Total equity</span>
+                  <input id="portfolio-total-equity" type="number" min="1" step="1000" value="100000" />
+                </label>
+                <label class="field">
+                  <span class="field-label">Cash notional</span>
+                  <input id="portfolio-cash-notional" type="number" min="0" step="1000" value="10000" />
+                </label>
+                <label class="field">
+                  <span class="field-label">Max positions</span>
+                  <input id="portfolio-max-positions" type="number" min="1" max="50" step="1" value="10" />
+                </label>
+              </div>
+
+              <div class="action-row">
+                <button id="portfolio-load-current" type="button">Load current</button>
+                <button id="portfolio-save-current" type="button">Save portfolio</button>
+              </div>
+
+              <section class="stack-section">
+                <div class="section-head">
+                  <h2>Positions editor</h2>
+                  <p>One line per holding: <code>TICKER, NOTIONAL, WEIGHT, RATING</code>.</p>
+                </div>
+                <textarea id="portfolio-positions-input" class="code-editor" spellcheck="false" rows="12" placeholder="AAPL, 25000, 0.25, Hold&#10;MSFT, 25000, 0.25, Underweight"></textarea>
+              </section>
+
+              <div class="action-row">
+                <button id="portfolio-generate-plan" type="button">Generate plan</button>
+                <button id="portfolio-apply-plan" type="button">Apply target portfolio</button>
+              </div>
+              <p id="portfolio-message" class="message" aria-live="polite"></p>
+
+              <section class="stack-section">
+                <div class="section-head">
+                  <h2>Current snapshot</h2>
+                  <p id="portfolio-current-meta">No portfolio loaded.</p>
+                </div>
+                <div id="portfolio-current-summary" class="summary-strip empty-state">Load the current portfolio to inspect the live paper book.</div>
+                <div id="portfolio-current-holdings" class="daily-table-shell empty-state">No portfolio positions loaded.</div>
+              </section>
+            </section>
+
+            <section class="viewer-pane">
+              <div class="pane-header">
+                <h2>Rebalance output</h2>
+                <p>Top-conviction target allocations and execution deltas for the selected trade date.</p>
+              </div>
+
+              <div id="portfolio-plan-meta" class="portfolio-banner empty-state">Generate a rebalance plan after the daily coverage run completes.</div>
+              <div id="portfolio-plan-summary" class="summary-strip empty-state">No rebalance plan generated yet.</div>
+
+              <section class="stack-section">
+                <div class="section-head">
+                  <h2>Selected book</h2>
+                  <p>Conviction-ranked names chosen for the target portfolio.</p>
+                </div>
+                <div id="portfolio-selected-tickers" class="ticker-list empty-state">No selected tickers yet.</div>
+              </section>
+
+              <section class="stack-section">
+                <div class="section-head">
+                  <h2>Ranking</h2>
+                  <p>All analyzed names, their ratings, and target allocation outcomes.</p>
+                </div>
+                <div id="portfolio-ranking-table" class="daily-table-shell empty-state">No ranking available yet.</div>
+              </section>
+
+              <section class="stack-section">
+                <div class="section-head">
+                  <h2>Order intents</h2>
+                  <p>Broker-ready market/day order payloads using notional deltas.</p>
+                </div>
+                <div id="portfolio-order-intents" class="daily-table-shell empty-state">No order intents yet.</div>
+              </section>
+            </section>
+          </div>
+        </section>
+
         <section id="token-usage" class="tab-panel">
           <div class="workspace">
             <section class="control-pane">
@@ -238,6 +338,6 @@
     <script>
       window.TRADINGAGENTS_DEFAULT_DATE = "{{ today }}";
     </script>
-    <script type="module" src="/static/app.js"></script>
+    <script type="module" src="/static/app.js?v=portfolio-tab-2"></script>
   </body>
 </html>

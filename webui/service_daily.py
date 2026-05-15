@@ -58,12 +58,14 @@ def new_daily_manifest(
     *,
     source: str,
     default_daily_tickers: tuple[str, ...],
+    watchlist_tickers: tuple[str, ...] | None,
     daily_coverage_policy: tuple[dict[str, str], ...],
     snapshot_loader: Callable[[str, str], dict[str, Any] | None],
 ) -> dict[str, Any]:
     return {
         "trade_date": trade_date,
         "source": source,
+        "watchlist_tickers": list(watchlist_tickers or default_daily_tickers),
         "policy": list(daily_coverage_policy),
         "tickers": [default_daily_entry(ticker, trade_date, snapshot_loader) for ticker in default_daily_tickers],
         "created_at": datetime.utcnow().isoformat() + "Z",
@@ -79,6 +81,7 @@ def load_daily_manifest(
     lock: RLock,
     source: str,
     default_daily_tickers: tuple[str, ...],
+    watchlist_tickers: tuple[str, ...] | None,
     daily_coverage_policy: tuple[dict[str, str], ...],
     snapshot_loader: Callable[[str, str], dict[str, Any] | None],
 ) -> dict[str, Any]:
@@ -89,6 +92,7 @@ def load_daily_manifest(
                 trade_date,
                 source=source,
                 default_daily_tickers=default_daily_tickers,
+                watchlist_tickers=watchlist_tickers,
                 daily_coverage_policy=daily_coverage_policy,
                 snapshot_loader=snapshot_loader,
             )
@@ -173,6 +177,7 @@ def prepare_daily_run(
     lock: RLock,
     source: str,
     default_daily_tickers: tuple[str, ...],
+    watchlist_tickers: tuple[str, ...] | None,
     daily_coverage_policy: tuple[dict[str, str], ...],
     manifest_loader: Callable[[str], dict[str, Any]],
     manifest_writer: Callable[[dict[str, Any]], dict[str, Any]],
@@ -183,6 +188,7 @@ def prepare_daily_run(
         manifest = manifest_loader(trade_date)
         manifest["policy"] = list(daily_coverage_policy)
         manifest["source"] = source
+        manifest["watchlist_tickers"] = list(watchlist_tickers or default_daily_tickers)
         known = {entry["ticker"]: entry for entry in manifest["tickers"]}
         tickers: list[dict[str, Any]] = []
         for ticker in default_daily_tickers:

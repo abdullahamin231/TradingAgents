@@ -39,7 +39,8 @@
 .policy-item p,
 .ticker-summary,
 .report-browser-meta,
-.empty-state {
+.empty-state,
+.portfolio-row-meta {
   color: var(--muted);
 }
 
@@ -75,7 +76,8 @@
 .summary-item,
 .report-meta-item,
 .usage-card,
-.usage-chart-card {
+.usage-chart-card,
+.portfolio-banner {
   background: var(--bg-soft);
   padding: 0.85rem;
 }
@@ -170,6 +172,28 @@
 .error-cell {
   min-width: 10rem;
   color: var(--text);
+}
+
+.portfolio-banner {
+  gap: 0.35rem;
+  border-left: 3px solid var(--line);
+}
+
+.portfolio-banner strong {
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.portfolio-banner-ready {
+  border-color: var(--accent);
+}
+
+.portfolio-banner-pending {
+  border-color: #8a6d3b;
+}
+
+.portfolio-row-meta {
+  font-size: 0.78rem;
 }
 
 .report-path-value {

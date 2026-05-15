@@ -12,8 +12,11 @@ from pydantic import BaseModel, Field
 
 from .service import (
     TradingJobManager,
+    build_daily_rebalance_plan,
     get_daily_run,
     get_daily_watchlist,
+    get_portfolio_state,
+    update_portfolio_state,
     list_llm_providers,
     list_report_tickers,
     list_report_runs,
@@ -48,6 +51,28 @@ class DailyRunQueueRequest(BaseModel):
     provider: str = Field(default="opencode", min_length=1, max_length=32)
     quick_model: str = Field(default="", max_length=128)
     deep_model: str = Field(default="", max_length=128)
+
+
+class PortfolioPositionRequest(BaseModel):
+    ticker: str = Field(min_length=1, max_length=32)
+    current_notional: float = Field(default=0.0, ge=0.0)
+    current_weight: float = Field(default=0.0, ge=0.0)
+    shares: float | None = Field(default=None, ge=0.0)
+    last_rating: str = Field(default="Hold", min_length=1, max_length=32)
+
+
+class PortfolioStateRequest(BaseModel):
+    as_of: str | None = None
+    total_equity: float = Field(default=100000.0, gt=0.0)
+    cash_notional: float | None = Field(default=None, ge=0.0)
+    source: str = Field(default="paper", min_length=1, max_length=64)
+    positions: list[PortfolioPositionRequest] = Field(default_factory=list, max_length=64)
+
+
+class RebalancePlanRequest(BaseModel):
+    total_equity: float | None = Field(default=None, gt=0.0)
+    max_positions: int = Field(default=10, ge=1, le=50)
+    apply_targets: bool = False
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -169,6 +194,32 @@ def retry_daily_ticker(trade_date: str, ticker: str, payload: DailyRunQueueReque
             deep_model=payload.deep_model,
             tickers=[ticker],
             retry_failed_only=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/portfolio/current")
+def portfolio_current() -> dict:
+    return get_portfolio_state()
+
+
+@app.put("/api/portfolio/current")
+def put_portfolio_current(payload: PortfolioStateRequest) -> dict:
+    try:
+        return update_portfolio_state(payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/daily-runs/{trade_date}/rebalance-plan")
+def rebalance_plan(trade_date: str, payload: RebalancePlanRequest) -> dict:
+    try:
+        return build_daily_rebalance_plan(
+            trade_date,
+            total_equity=payload.total_equity,
+            max_positions=payload.max_positions,
+            apply_targets=payload.apply_targets,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

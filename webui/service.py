@@ -21,6 +21,7 @@ from tradingagents.llm_clients.provider_urls import get_ollama_base_url
 from tradingagents.reporting import save_complete_report
 
 from . import service_daily, service_reports
+from . import service_portfolio
 from .seeking_alpha import fetch_seeking_alpha_watchlist
 from .service_helpers import PathsConfig, SAVED_REPORT_ID_PATTERN, TOKEN_USAGE_FILENAME, atomic_write_json, markdown_to_html, token_usage_path
 from .service_usage import TokenUsageCollector, get_token_usage_payload, iter_saved_usage_records
@@ -33,7 +34,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 REPORTS_DIR = REPO_ROOT / "reports"
 OPENCODE_CONFIG_PATH = REPO_ROOT / "opencode.json"
 DAILY_RUNS_DIRNAME = "daily_runs"
-REPORTS_SYSTEM_DIRS = {"cache", "memory", DAILY_RUNS_DIRNAME, "_legacy_root_artifacts"}
+PORTFOLIO_DIRNAME = "portfolio"
+REPORTS_SYSTEM_DIRS = {"cache", "memory", DAILY_RUNS_DIRNAME, PORTFOLIO_DIRNAME, "_legacy_root_artifacts"}
 _daily_manifest_lock = threading.RLock()
 OPENCODE_DEFAULT_QUICK_MODEL = "openai/gpt-5.4-mini"
 OPENCODE_DEFAULT_DEEP_MODEL = "openai/gpt-5.4"
@@ -151,6 +153,10 @@ def _daily_watchlist_cache_dir() -> Path:
     return REPO_ROOT / "webui_artifacts" / "seeking_alpha_watchlist"
 
 
+def _portfolio_paths() -> service_portfolio.PortfolioPaths:
+    return service_portfolio.PortfolioPaths(REPORTS_DIR, PORTFOLIO_DIRNAME)
+
+
 def _resolve_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
     payload = fetch_seeking_alpha_watchlist(
         cache_dir=_daily_watchlist_cache_dir(),
@@ -254,6 +260,10 @@ def _saved_report_snapshot(ticker: str, trade_date: str) -> dict[str, Any] | Non
     return service_reports.saved_report_snapshot(ticker, trade_date, _paths())
 
 
+def _daily_coverage_tickers(watchlist_tickers: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys([*watchlist_tickers, *service_portfolio.portfolio_holdings_tickers(_portfolio_paths())]))
+
+
 def _load_daily_manifest(trade_date: str) -> dict[str, Any]:
     watchlist = _resolve_daily_watchlist()
     return service_daily.load_daily_manifest(
@@ -262,7 +272,8 @@ def _load_daily_manifest(trade_date: str) -> dict[str, Any]:
         dirname=DAILY_RUNS_DIRNAME,
         lock=_daily_manifest_lock,
         source=str(watchlist["source"]),
-        default_daily_tickers=tuple(watchlist["tickers"]),
+        default_daily_tickers=_daily_coverage_tickers(tuple(watchlist["tickers"])),
+        watchlist_tickers=tuple(watchlist["tickers"]),
         daily_coverage_policy=DAILY_COVERAGE_POLICY,
         snapshot_loader=_saved_report_snapshot,
     )
@@ -379,22 +390,26 @@ def load_report(ticker: str, report_id: str) -> dict[str, Any]:
 
 def get_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
     watchlist = _resolve_daily_watchlist(force_refresh=force_refresh)
+    holdings = list(service_portfolio.portfolio_holdings_tickers(_portfolio_paths()))
     metadata = {
         "fetched_at": watchlist.get("fetched_at"),
         "screenshots": list(watchlist.get("screenshots", [])),
         "error": watchlist.get("error"),
         "stale": bool(watchlist.get("stale", False)),
+        "existing_holdings": holdings,
     }
     return service_daily.get_daily_watchlist(str(watchlist["source"]), tuple(watchlist["tickers"]), DAILY_COVERAGE_POLICY, metadata)
 
 
 def prepare_daily_run(trade_date: str) -> dict[str, Any]:
     watchlist = _resolve_daily_watchlist()
+    coverage_tickers = _daily_coverage_tickers(tuple(watchlist["tickers"]))
     return service_daily.prepare_daily_run(
         trade_date,
         lock=_daily_manifest_lock,
         source=str(watchlist["source"]),
-        default_daily_tickers=tuple(watchlist["tickers"]),
+        default_daily_tickers=coverage_tickers,
+        watchlist_tickers=tuple(watchlist["tickers"]),
         daily_coverage_policy=DAILY_COVERAGE_POLICY,
         manifest_loader=_load_daily_manifest,
         manifest_writer=_write_daily_manifest,
@@ -405,6 +420,71 @@ def prepare_daily_run(trade_date: str) -> dict[str, Any]:
 
 def get_daily_run(trade_date: str) -> dict[str, Any]:
     return service_daily.get_daily_run(trade_date, _load_daily_manifest)
+
+
+def get_portfolio_state() -> dict[str, Any]:
+    return service_portfolio.load_portfolio_state(_portfolio_paths())
+
+
+def update_portfolio_state(payload: dict[str, Any]) -> dict[str, Any]:
+    total_equity = float(payload.get("total_equity", service_portfolio.DEFAULT_PORTFOLIO_TOTAL_EQUITY) or service_portfolio.DEFAULT_PORTFOLIO_TOTAL_EQUITY)
+    state = service_portfolio.default_portfolio_state(total_equity)
+    state["as_of"] = payload.get("as_of")
+    state["source"] = payload.get("source") or "paper"
+    positions: list[dict[str, Any]] = []
+    for item in payload.get("positions", []):
+        if not isinstance(item, dict):
+            continue
+        ticker = safe_ticker_component(str(item.get("ticker", "")).strip().upper())
+        current_notional = float(item.get("current_notional", 0.0) or 0.0)
+        current_weight = float(item.get("current_weight", 0.0) or 0.0)
+        if current_notional > 0.0 and current_weight <= 0.0 and total_equity > 0.0:
+            current_weight = current_notional / total_equity
+        positions.append(
+            {
+                "ticker": ticker,
+                "shares": item.get("shares"),
+                "current_notional": round(current_notional, 2),
+                "current_weight": round(current_weight, 6),
+                "last_rating": parse_rating(str(item.get("last_rating", "Hold"))),
+            }
+        )
+    state["positions"] = positions
+    state["cash_notional"] = round(float(payload.get("cash_notional", max(state["total_equity"] - sum(position["current_notional"] for position in positions), 0.0)) or 0.0), 2)
+    return service_portfolio.write_portfolio_state(_portfolio_paths(), state)
+
+
+def build_daily_rebalance_plan(
+    trade_date: str,
+    *,
+    total_equity: float | None = None,
+    max_positions: int = service_portfolio.DEFAULT_TARGET_POSITION_COUNT,
+    apply_targets: bool = False,
+) -> dict[str, Any]:
+    manifest = get_daily_run(trade_date)
+    watchlist = _resolve_daily_watchlist()
+    previous_manifest = service_portfolio.latest_previous_manifest(
+        trade_date,
+        REPORTS_DIR / DAILY_RUNS_DIRNAME,
+        _load_daily_manifest,
+    )
+    previous_watchlist = tuple(previous_manifest.get("watchlist_tickers", [])) if previous_manifest else ()
+    plan = service_portfolio.build_rebalance_plan(
+        trade_date=trade_date,
+        manifest=manifest,
+        portfolio_state=get_portfolio_state(),
+        watchlist_tickers=tuple(watchlist["tickers"]),
+        previous_watchlist_tickers=previous_watchlist,
+        total_equity=total_equity,
+        max_positions=max_positions,
+    )
+    service_portfolio.write_rebalance_plan(_portfolio_paths(), plan)
+    if apply_targets:
+        if not plan["ready"]:
+            raise ValueError("Daily rebalance plan is not ready because required analysis is still pending.")
+        updated_state = service_portfolio.apply_rebalance_plan(_portfolio_paths(), plan)
+        plan = {**plan, "applied": True, "target_portfolio": updated_state}
+    return plan
 
 
 def queue_daily_run_entries(
