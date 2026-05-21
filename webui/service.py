@@ -309,9 +309,8 @@ def _daily_coverage_tickers(watchlist_tickers: tuple[str, ...]) -> tuple[str, ..
 
 
 def _load_daily_manifest(trade_date: str) -> dict[str, Any]:
-    watchlist = _resolve_screened_daily_watchlist()
+    watchlist = _resolve_daily_watchlist()
     coverage_tickers = _daily_coverage_tickers(tuple(watchlist["tickers"]))
-    screening = _screen_daily_tickers(coverage_tickers)
     manifest = service_daily.load_daily_manifest(
         trade_date,
         reports_dir=REPORTS_DIR,
@@ -323,7 +322,10 @@ def _load_daily_manifest(trade_date: str) -> dict[str, Any]:
         daily_coverage_policy=DAILY_COVERAGE_POLICY,
         snapshot_loader=_saved_report_snapshot,
     )
-    return service_daily.annotate_manifest_compliance(manifest, screening)
+    if not get_settings().get("halal_checker_enabled", True):
+        disabled_screening = _screen_daily_tickers(coverage_tickers)
+        return service_daily.annotate_manifest_compliance(manifest, disabled_screening)
+    return manifest
 
 
 def _write_daily_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
@@ -451,7 +453,7 @@ def get_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
 
 
 def prepare_daily_run(trade_date: str) -> dict[str, Any]:
-    watchlist = _resolve_screened_daily_watchlist()
+    watchlist = _resolve_daily_watchlist()
     coverage_tickers = _daily_coverage_tickers(tuple(watchlist["tickers"]))
     screening = _screen_daily_tickers(coverage_tickers)
     return service_daily.prepare_daily_run(

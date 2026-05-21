@@ -112,13 +112,20 @@ def find_daily_entry(manifest: dict[str, Any], ticker: str) -> dict[str, Any]:
 
 
 def manifest_summary(manifest: dict[str, Any]) -> dict[str, int]:
-    summary = {"pending": 0, "queued": 0, "running": 0, "completed": 0, "failed": 0, "blocked": 0}
+    summary = {"pending": 0, "queued": 0, "running": 0, "completed": 0, "failed": 0, "blocked": 0, "screening_errors": 0}
     for entry in manifest["tickers"]:
-        if entry.get("shariah_compliance", {}).get("allowed") is False:
+        compliance = entry.get("shariah_compliance", {})
+        if is_blocking_compliance(compliance):
             summary["blocked"] += 1
+        elif compliance.get("status") == "screening_error":
+            summary["screening_errors"] += 1
         summary[entry["status"]] = summary.get(entry["status"], 0) + 1
     summary["total"] = len(manifest["tickers"])
     return summary
+
+
+def is_blocking_compliance(compliance: dict[str, Any]) -> bool:
+    return compliance.get("allowed") is False and compliance.get("status") not in {"screening_error", "unknown"}
 
 
 def annotate_manifest_compliance(manifest: dict[str, Any], screening: dict[str, Any]) -> dict[str, Any]:
@@ -262,7 +269,7 @@ def queue_daily_run_entries(
         screening_enabled = bool((manifest_payload.get("screening") or {}).get("enabled"))
         for entry in manifest_payload["tickers"]:
             compliance = entry.get("shariah_compliance") or {}
-            if screening_enabled and compliance.get("allowed") is False:
+            if screening_enabled and is_blocking_compliance(compliance):
                 entry["error"] = f"Blocked by Shariah screening: {compliance.get('status') or 'unknown'}"
                 continue
             if selected and entry["ticker"] not in selected:

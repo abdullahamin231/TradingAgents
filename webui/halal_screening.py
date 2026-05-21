@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -147,8 +148,28 @@ def _screen_ticker(session: requests.Session, config: HalalScreeningConfig, tick
     url = config.url_template.format(ticker=ticker)
     try:
         response = session.get(url, timeout=config.timeout_seconds)
+        if response.status_code == 429:
+            retry_after = _retry_after_seconds(response)
+            if retry_after is not None and retry_after <= 60:
+                time.sleep(max(retry_after, 1))
+                response = session.get(url, timeout=config.timeout_seconds)
+        if response.status_code == 429:
+            return HalalScreeningResult(
+                ticker=ticker,
+                allowed=False,
+                status="screening_error",
+                error=_http_error_message(response),
+            )
         response.raise_for_status()
         payload = response.json()
+    except requests.HTTPError as exc:
+        response = exc.response
+        return HalalScreeningResult(
+            ticker=ticker,
+            allowed=False,
+            status="screening_error",
+            error=_http_error_message(response) if response is not None else str(exc),
+        )
     except (requests.RequestException, ValueError) as exc:
         return HalalScreeningResult(
             ticker=ticker,
@@ -209,6 +230,31 @@ def _extract_status_from_value(value: Any) -> str | None:
 
 def _normalize_status(value: str) -> str:
     return " ".join(str(value).strip().lower().replace("_", " ").replace("-", " ").split())
+
+
+def _retry_after_seconds(response: requests.Response) -> int | None:
+    try:
+        return int(response.headers.get("retry-after", ""))
+    except ValueError:
+        return None
+
+
+def _http_error_message(response: requests.Response) -> str:
+    message = f"HTTP {response.status_code}"
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+    if isinstance(payload, dict):
+        error = payload.get("error") or payload.get("message") or payload.get("detail")
+        if error:
+            message = f"{message}: {error}"
+        reset_at = payload.get("resetAt")
+        if reset_at:
+            message = f"{message}; reset at {reset_at}"
+    elif response.text:
+        message = f"{message}: {response.text[:200]}"
+    return message
 
 
 def describe_env() -> dict[str, str]:

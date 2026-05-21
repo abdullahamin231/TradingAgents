@@ -40,7 +40,14 @@ function complianceClass(compliance = null) {
   if (!compliance) {
     return "";
   }
+  if (["screening_error", "unknown"].includes(compliance.status)) {
+    return " shariah-warning";
+  }
   return compliance.allowed === false ? " shariah-blocked" : " shariah-compliant";
+}
+
+function isBlockingCompliance(compliance = null) {
+  return compliance?.allowed === false && !["screening_error", "unknown"].includes(compliance.status);
 }
 
 function complianceTitle(compliance = null) {
@@ -159,6 +166,7 @@ export function renderDailySummary(summary = null) {
     ["Completed", summary.completed],
     ["Failed", summary.failed],
     ["Blocked", summary.blocked || 0],
+    ["Check errors", summary.screening_errors || 0],
   ];
 
   dailySummary.className = "summary-strip";
@@ -209,7 +217,7 @@ export function renderDailyManifest(payload) {
             (entry) => {
               const compliance = entry.shariah_compliance || watchlistCompliance[entry.ticker] || null;
               return `
-              <tr class="${screeningEnabled && compliance?.allowed === false ? "daily-row-blocked" : ""}">
+              <tr class="${screeningEnabled && isBlockingCompliance(compliance) ? "daily-row-blocked" : ""}">
                 <td><strong>${escapeHtml(entry.ticker)}</strong></td>
                 <td>${renderComplianceBadge(screeningEnabled ? compliance : null)}</td>
                 <td><span class="${statusClass(entry.status)}">${escapeHtml(entry.status)}</span></td>
@@ -240,7 +248,7 @@ function renderComplianceBadge(compliance = null) {
     return '<span class="compliance-badge compliance-unknown">not checked</span>';
   }
   const status = compliance.status || "unknown";
-  const label = compliance.allowed === false ? `blocked · ${status}` : status;
+  const label = status === "screening_error" ? "check failed" : isBlockingCompliance(compliance) ? `blocked · ${status}` : status;
   return `<span class="compliance-badge${complianceClass(compliance)}"${complianceTitle(compliance)}>${escapeHtml(label)}</span>`;
 }
 

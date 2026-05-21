@@ -204,6 +204,12 @@
   color: var(--success);
 }
 
+.ticker-chip.shariah-warning,
+.compliance-badge.shariah-warning {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
 .compliance-badge {
   display: inline-block;
   border: 1px solid var(--line);
