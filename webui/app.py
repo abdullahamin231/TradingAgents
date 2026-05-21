@@ -21,6 +21,7 @@ from .service import (
     get_daily_watchlist,
     get_portfolio_state,
     get_token_usage,
+    halal_screening_status,
     list_llm_providers,
     list_report_runs,
     list_report_tickers,
@@ -29,6 +30,7 @@ from .service import (
     prepare_daily_run,
     queue_daily_run_entries,
     queue_single_ticker_run,
+    refresh_halal_screening_cache,
     rerun_daily_halal_check,
     sync_alpaca_paper_portfolio,
     update_settings,
@@ -107,7 +109,6 @@ def _scheduler_loop() -> None:
         if current_settings.get("last_scheduled_daily_run_date") == run_date:
             continue
         try:
-            prepare_daily_run(run_date)
             queue_daily_run_entries(job_manager, run_date)
             mark_scheduled_daily_run(run_date)
         except Exception:
@@ -242,6 +243,22 @@ def prepare_daily_coverage(trade_date: str) -> dict:
 def rerun_daily_halal_screening(trade_date: str) -> dict:
     try:
         return rerun_daily_halal_check(trade_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/halal-screening/refresh")
+def refresh_halal_screening() -> dict:
+    try:
+        return refresh_halal_screening_cache()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/halal-screening/status")
+def read_halal_screening_status() -> dict:
+    try:
+        return halal_screening_status()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -137,7 +137,6 @@
                 </div>
                 <div class="action-row action-row-compact">
                   <button id="rescrape-daily-watchlist" type="button">Rescrape tickers</button>
-                  <button id="rerun-halal-check" type="button">Rerun halal checker</button>
                 </div>
                 <div id="daily-watchlist" class="ticker-list empty-state">Loading watchlist...</div>
                 <div id="daily-watchlist-holdings" class="watchlist-note empty-state">Loading holdings context...</div>
@@ -367,6 +366,7 @@
 
               <div class="action-row">
                 <button id="settings-save" type="button">Save settings</button>
+                <button id="settings-run-halal-check" type="button">Rerun halal tickers</button>
               </div>
               <p id="settings-message" class="message" aria-live="polite"></p>
             </section>
@@ -377,6 +377,7 @@
                 <p>Daily coverage runs once per New York calendar day at the configured time.</p>
               </div>
               <div id="settings-summary" class="portfolio-banner empty-state">Loading settings...</div>
+              <div id="settings-halal-status" class="daily-table-shell empty-state">Loading halal screening cache...</div>
             </section>
           </div>
         </section>

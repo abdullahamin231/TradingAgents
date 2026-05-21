@@ -267,6 +267,49 @@
   border-left: 3px solid var(--line);
 }
 
+.settings-status-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, auto);
+  gap: 1rem;
+  padding: 0.85rem;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-status-head strong {
+  color: var(--text);
+}
+
+.settings-status-head p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  word-break: break-all;
+}
+
+.settings-status-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.settings-progress {
+  height: 0.35rem;
+  background: var(--bg);
+}
+
+.settings-progress div {
+  height: 100%;
+  background: var(--accent);
+}
+
+.settings-halal-table td:nth-child(4) {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .watchlist-note,
 .watchlist-diff {
   margin-top: 0.75rem;

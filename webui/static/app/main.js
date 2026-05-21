@@ -2,7 +2,6 @@ import {
   dailyDateInput,
   dailyMessage,
   dailyPrepareButton,
-  dailyRerunHalalButton,
   dailyRescrapeButton,
   dailyRunMissingButton,
   dailyStatusDate,
@@ -19,13 +18,13 @@ import {
   tabButtons,
   tickerSelect,
 } from "./dom.js?v=settings-tab-1";
-import { loadDailyManifest, loadDailyWatchlist, prepareDailyRun, rerunHalalCheck, rescrapeDailyWatchlist, retryDailyTicker, runMissingDaily } from "./daily.js?v=settings-tab-1";
+import { loadDailyManifest, loadDailyWatchlist, prepareDailyRun, rescrapeDailyWatchlist, retryDailyTicker, runMissingDaily } from "./daily.js?v=settings-tab-1";
 import { fetchJobs } from "./jobs.js?v=settings-tab-1";
 import { submitOnDemandRun } from "./on-demand.js?v=settings-tab-1";
 import { bindPortfolioActions, loadCurrentPortfolio } from "./portfolio.js?v=settings-tab-1";
 import { loadProviders, updateModelDefault } from "./providers.js?v=settings-tab-1";
 import { loadReport, loadReportsForTicker, loadTickers, renderReportDocument } from "./reports.js?v=settings-tab-1";
-import { bindSettingsActions, loadSettings } from "./settings.js?v=settings-tab-1";
+import { bindSettingsActions, loadHalalScreeningStatus, loadSettings } from "./settings.js?v=settings-tab-1";
 import { state } from "./state.js?v=settings-tab-1";
 import { loadTokenUsage } from "./token-usage.js?v=settings-tab-1";
 import { setMessage, setTab } from "./utils.js?v=settings-tab-1";
@@ -50,7 +49,6 @@ function registerEventHandlers() {
   dailyPrepareButton.addEventListener("click", prepareDailyRun);
   dailyRunMissingButton.addEventListener("click", runMissingDaily);
   dailyRescrapeButton.addEventListener("click", rescrapeDailyWatchlist);
-  dailyRerunHalalButton.addEventListener("click", rerunHalalCheck);
   dailyStatusTable.addEventListener("click", (event) => {
     const button = event.target.closest("[data-retry-ticker]");
     if (!button) {
@@ -92,5 +90,6 @@ export function initApp() {
   loadTickers();
   loadTokenUsage();
   loadSettings();
+  loadHalalScreeningStatus();
   startPolling();
 }

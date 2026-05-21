@@ -3,7 +3,6 @@ import {
   dailyMessage,
   dailyPolicy,
   dailyPrepareButton,
-  dailyRerunHalalButton,
   dailyRescrapeButton,
   dailyRunMissingButton,
   dailyStatusDate,
@@ -73,6 +72,7 @@ function renderTickerChips(tickers, className = "ticker-chip", screening = {}) {
 function renderWatchlistHoldings(metadata = {}, tickers = []) {
   const existingHoldings = uniqueTickers(metadata.existing_holdings || []);
   const holdingsOutsideWatchlist = existingHoldings.filter((ticker) => !tickers.includes(ticker));
+  const screening = metadata.screening || {};
   if (!holdingsOutsideWatchlist.length) {
     dailyWatchlistHoldings.className = "watchlist-note empty-state";
     dailyWatchlistHoldings.textContent = "All current holdings are already present in the live watchlist.";
@@ -84,7 +84,7 @@ function renderWatchlistHoldings(metadata = {}, tickers = []) {
     <strong>Held outside live watchlist</strong>
     <p>These are not in the latest rescrape, but they still get added to the daily coverage manifest because they are current holdings.</p>
     <div class="ticker-list ticker-list-inline">
-      ${renderTickerChips(holdingsOutsideWatchlist, "ticker-chip ticker-chip-held")}
+      ${renderTickerChips(holdingsOutsideWatchlist, "ticker-chip ticker-chip-held", screening)}
     </div>
   `;
 }
@@ -284,34 +284,6 @@ export async function rescrapeDailyWatchlist() {
     );
   } finally {
     dailyRescrapeButton.disabled = false;
-  }
-}
-
-export async function rerunHalalCheck() {
-  const tradeDate = dailyDateInput.value.trim();
-  if (!isValidTradeDate(tradeDate)) {
-    setMessage(dailyMessage, "Date must use YYYY-MM-DD.", true);
-    return;
-  }
-
-  dailyRerunHalalButton.disabled = true;
-  setMessage(dailyMessage, "");
-  try {
-    const response = await fetch(`/api/daily-runs/${encodeURIComponent(tradeDate)}/halal-check`, { method: "POST" });
-    const payload = await response.json();
-    if (!response.ok) {
-      setMessage(dailyMessage, payload.detail || "Failed to rerun halal checker.", true);
-      return;
-    }
-    await loadDailyWatchlist();
-    renderDailyManifest(payload);
-    const blockedCount = payload.summary?.blocked || 0;
-    setMessage(
-      dailyMessage,
-      `Reran halal checker for ${tradeDate}. Blocked ${blockedCount} ticker${blockedCount === 1 ? "" : "s"}.`
-    );
-  } finally {
-    dailyRerunHalalButton.disabled = false;
   }
 }
 

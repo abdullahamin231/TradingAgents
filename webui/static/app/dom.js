@@ -42,8 +42,10 @@ export const tokenUsageRuns = document.querySelector("#token-usage-runs");
 export const settingsHalalCheckerEnabled = document.querySelector("#settings-halal-checker-enabled");
 export const settingsDailyRunTime = document.querySelector("#settings-daily-run-time");
 export const settingsSaveButton = document.querySelector("#settings-save");
+export const settingsRunHalalButton = document.querySelector("#settings-run-halal-check");
 export const settingsMessage = document.querySelector("#settings-message");
 export const settingsSummary = document.querySelector("#settings-summary");
+export const settingsHalalStatus = document.querySelector("#settings-halal-status");
 
 export const onDemandSubmitButton = document.querySelector("#on-demand-submit");
 export const onDemandTickerInput = document.querySelector("#on-demand-ticker");
@@ -53,7 +55,6 @@ export const onDemandMessage = document.querySelector("#on-demand-message");
 export const dailyPrepareButton = document.querySelector("#prepare-daily-run");
 export const dailyRunMissingButton = document.querySelector("#run-missing-daily");
 export const dailyRescrapeButton = document.querySelector("#rescrape-daily-watchlist");
-export const dailyRerunHalalButton = document.querySelector("#rerun-halal-check");
 export const dailyDateInput = document.querySelector("#daily-date");
 export const dailyMessage = document.querySelector("#daily-message");
 

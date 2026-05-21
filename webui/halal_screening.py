@@ -3,11 +3,15 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import asdict, dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import requests
 
 from tradingagents.dataflows.utils import safe_ticker_component
+
+from .service_helpers import atomic_write_json, load_json_payload
 
 
 HALALSCREENER_API_KEY_ENV = "HALALSCREENER_API_KEY"
@@ -98,44 +102,123 @@ def screening_enabled() -> bool:
     return load_config().enabled
 
 
-def screen_tickers(tickers: tuple[str, ...]) -> dict[str, Any]:
+def _utcnow() -> str:
+    return datetime.utcnow().isoformat() + "Z"
+
+
+def _empty_cache() -> dict[str, Any]:
+    return {"provider": "halalscreener", "results": {}, "updated_at": None}
+
+
+def load_cache(cache_path: Path | None) -> dict[str, Any]:
+    if cache_path is None or not cache_path.exists():
+        return _empty_cache()
+    try:
+        payload, _ = load_json_payload(cache_path)
+    except (OSError, ValueError):
+        return _empty_cache()
+    results = payload.get("results") if isinstance(payload, dict) else None
+    return {
+        "provider": "halalscreener",
+        "results": results if isinstance(results, dict) else {},
+        "updated_at": payload.get("updated_at") if isinstance(payload, dict) else None,
+    }
+
+
+def _cacheable_result(payload: dict[str, Any]) -> bool:
+    return payload.get("status") not in {"screening_error", "unknown"} and payload.get("error") in {None, ""}
+
+
+def _cached_payload(cache: dict[str, Any], ticker: str) -> dict[str, Any] | None:
+    result = (cache.get("results") or {}).get(ticker)
+    if isinstance(result, dict) and _cacheable_result(result):
+        return {**result, "cached": True}
+    return None
+
+
+def cached_screening_payload(tickers: tuple[str, ...], cache_path: Path | None) -> dict[str, Any]:
+    normalized = tuple(dict.fromkeys(safe_ticker_component(ticker.strip().upper()) for ticker in tickers if ticker))
+    cache = load_cache(cache_path)
+    results = [payload for ticker in normalized if (payload := _cached_payload(cache, ticker)) is not None]
+    kept = [result["ticker"] for result in results if result.get("allowed") is True]
+    excluded = [
+        {
+            "ticker": result["ticker"],
+            "status": result.get("status"),
+            "raw_status": result.get("raw_status"),
+            "error": result.get("error"),
+        }
+        for result in results
+        if result.get("allowed") is False
+    ]
+    return {
+        "enabled": bool(results),
+        "provider": "halalscreener",
+        "tickers": list(normalized),
+        "kept_tickers": kept,
+        "excluded": excluded,
+        "results": results,
+        "error": None,
+        "cache": {"path": str(cache_path) if cache_path else None, "hit_count": len(results), "miss_count": len(normalized) - len(results)},
+    }
+
+
+def screen_tickers(tickers: tuple[str, ...], *, cache_path: Path | None = None, force_refresh: bool = False, progress_callback=None) -> dict[str, Any]:
     config = load_config()
     normalized = tuple(dict.fromkeys(safe_ticker_component(ticker.strip().upper()) for ticker in tickers if ticker))
     if not config.enabled:
-        return {
-            "enabled": False,
-            "provider": "halalscreener",
-            "tickers": list(normalized),
-            "kept_tickers": list(normalized),
-            "excluded": [],
-            "results": [],
-            "error": None,
-        }
+        payload = cached_screening_payload(normalized, cache_path)
+        return {**payload, "enabled": False, "kept_tickers": list(normalized), "reason": "not_configured"}
 
     session = requests.Session()
     auth_value = f"{config.auth_scheme} {config.api_key}" if config.auth_scheme else config.api_key
     session.headers.update({config.auth_header: auth_value, "accept": "application/json"})
+    cache = load_cache(cache_path)
+    cache_results = dict(cache.get("results") or {})
 
     kept: list[str] = []
     excluded: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
-    for index, ticker in enumerate(normalized):
-        if index and index % HALALSCREENER_REQUESTS_PER_MINUTE == 0:
-            time.sleep(HALALSCREENER_RATE_LIMIT_SLEEP_SECONDS)
-        result = _screen_ticker(session, config, ticker)
-        payload = result.to_payload()
+    request_count = 0
+    cache_hit_count = 0
+    cache_updated = False
+    for ticker in normalized:
+        cached = None if force_refresh else _cached_payload(cache, ticker)
+        if cached is not None:
+            cache_hit_count += 1
+            payload = cached
+            if progress_callback is not None:
+                progress_callback({"ticker": ticker, "status": payload.get("status"), "source": "cache", "request_count": request_count})
+        else:
+            if request_count and request_count % HALALSCREENER_REQUESTS_PER_MINUTE == 0:
+                if progress_callback is not None:
+                    progress_callback({"ticker": ticker, "status": "waiting_for_rate_limit", "source": "rate_limit", "request_count": request_count})
+                time.sleep(HALALSCREENER_RATE_LIMIT_SLEEP_SECONDS)
+            request_count += 1
+            if progress_callback is not None:
+                progress_callback({"ticker": ticker, "status": "checking", "source": "api", "request_count": request_count})
+            result = _screen_ticker(session, config, ticker)
+            payload = {**result.to_payload(), "checked_at": _utcnow(), "cached": False}
+            if _cacheable_result(payload):
+                cache_results[ticker] = {key: value for key, value in payload.items() if key != "cached"}
+                cache_updated = True
+            if progress_callback is not None:
+                progress_callback({"ticker": ticker, "status": payload.get("status"), "source": "api", "request_count": request_count})
         results.append(payload)
-        if result.allowed:
+        if payload.get("allowed") is True:
             kept.append(ticker)
             continue
         excluded.append(
             {
                 "ticker": ticker,
-                "status": result.status,
-                "raw_status": result.raw_status,
-                "error": result.error,
+                "status": payload.get("status"),
+                "raw_status": payload.get("raw_status"),
+                "error": payload.get("error"),
             }
         )
+
+    if cache_path is not None and cache_updated:
+        atomic_write_json(cache_path, {"provider": "halalscreener", "results": cache_results, "updated_at": _utcnow()})
 
     return {
         "enabled": True,
@@ -145,6 +228,7 @@ def screen_tickers(tickers: tuple[str, ...]) -> dict[str, Any]:
         "excluded": excluded,
         "results": results,
         "error": None,
+        "cache": {"path": str(cache_path) if cache_path else None, "hit_count": cache_hit_count, "miss_count": request_count},
     }
 
 
@@ -163,6 +247,13 @@ def _screen_ticker(session: requests.Session, config: HalalScreeningConfig, tick
                 allowed=False,
                 status="screening_error",
                 error=_http_error_message(response),
+            )
+        if response.status_code == 404:
+            return HalalScreeningResult(
+                ticker=ticker,
+                allowed=False,
+                status="not covered",
+                raw_status="not covered",
             )
         response.raise_for_status()
         payload = response.json()

@@ -36,6 +36,20 @@ DAILY_RUNS_DIRNAME = "daily_runs"
 PORTFOLIO_DIRNAME = "portfolio"
 REPORTS_SYSTEM_DIRS = {"cache", "memory", DAILY_RUNS_DIRNAME, PORTFOLIO_DIRNAME, "_legacy_root_artifacts"}
 _daily_manifest_lock = threading.RLock()
+_halal_screening_refresh_lock = threading.Lock()
+_halal_screening_refresh_state: dict[str, Any] = {
+    "status": "idle",
+    "started_at": None,
+    "completed_at": None,
+    "current_ticker": None,
+    "processed": 0,
+    "total": 0,
+    "checked": 0,
+    "cached": 0,
+    "errors": 0,
+    "results": [],
+    "error": None,
+}
 OPENCODE_DEFAULT_QUICK_MODEL = "openai/gpt-5.4-mini"
 OPENCODE_DEFAULT_DEEP_MODEL = "openai/gpt-5.4"
 DEFAULT_DAILY_TICKERS = (
@@ -160,6 +174,10 @@ def _settings_path() -> Path:
     return REPO_ROOT / "webui_artifacts" / "settings.json"
 
 
+def _halal_screening_cache_path() -> Path:
+    return REPO_ROOT / "webui_artifacts" / "halal_screening_cache.json"
+
+
 def get_settings() -> dict[str, Any]:
     return settings.load_settings(_settings_path())
 
@@ -176,17 +194,66 @@ def _screen_daily_tickers(tickers: tuple[str, ...]) -> dict[str, Any]:
     app_settings = get_settings()
     if not app_settings.get("halal_checker_enabled", True):
         normalized = list(dict.fromkeys(safe_ticker_component(ticker.strip().upper()) for ticker in tickers if ticker))
+        cached = halal_screening.cached_screening_payload(tuple(normalized), _halal_screening_cache_path())
         return {
             "enabled": False,
             "provider": "halalscreener",
             "reason": "disabled_by_settings",
             "tickers": normalized,
             "kept_tickers": normalized,
-            "excluded": [],
-            "results": [],
+            "excluded": cached["excluded"],
+            "results": cached["results"],
             "error": None,
+            "cache": cached["cache"],
         }
-    return halal_screening.screen_tickers(tickers)
+    return halal_screening.screen_tickers(tickers, cache_path=_halal_screening_cache_path())
+
+
+def _cached_daily_screening(tickers: tuple[str, ...]) -> dict[str, Any]:
+    return halal_screening.cached_screening_payload(tickers, _halal_screening_cache_path())
+
+
+def _halal_screening_target_tickers() -> tuple[str, ...]:
+    watchlist = _resolve_daily_watchlist()
+    return tuple(
+        dict.fromkeys(
+            [
+                *DEFAULT_DAILY_TICKERS,
+                *watchlist.get("tickers", ()),
+                *service_portfolio.portfolio_holdings_tickers(_portfolio_paths()),
+            ]
+        )
+    )
+
+
+def halal_screening_status() -> dict[str, Any]:
+    tickers = _halal_screening_target_tickers()
+    cached = _cached_daily_screening(tickers)
+    results_by_ticker = {result["ticker"]: result for result in cached.get("results", [])}
+    ticker_rows = [
+        {
+            "ticker": ticker,
+            "cached": ticker in results_by_ticker,
+            "compliance": results_by_ticker.get(ticker),
+        }
+        for ticker in tickers
+    ]
+    with _halal_screening_refresh_lock:
+        refresh = copy.deepcopy(_halal_screening_refresh_state)
+    missing = [row["ticker"] for row in ticker_rows if not row["cached"]]
+    return {
+        "provider": "halalscreener",
+        "cache_path": str(_halal_screening_cache_path()),
+        "cache_updated_at": halal_screening.load_cache(_halal_screening_cache_path()).get("updated_at"),
+        "summary": {
+            "total": len(tickers),
+            "cached": len(ticker_rows) - len(missing),
+            "missing": len(missing),
+        },
+        "tickers": ticker_rows,
+        "missing_tickers": missing,
+        "refresh": refresh,
+    }
 
 
 def _resolve_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
@@ -200,12 +267,12 @@ def _resolve_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
 
 def _resolve_screened_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
     watchlist = _resolve_daily_watchlist(force_refresh=force_refresh)
-    screening = _screen_daily_tickers(tuple(watchlist.get("tickers", ())))
+    screening = _cached_daily_screening(tuple(watchlist.get("tickers", ())))
     return {
         **watchlist,
         "raw_tickers": list(watchlist.get("tickers", ())),
         "tickers": screening["tickers"],
-        "eligible_tickers": screening["kept_tickers"],
+        "eligible_tickers": list(watchlist.get("tickers", ())),
         "screening": screening,
     }
 
@@ -325,6 +392,9 @@ def _load_daily_manifest(trade_date: str) -> dict[str, Any]:
     if not get_settings().get("halal_checker_enabled", True):
         disabled_screening = _screen_daily_tickers(coverage_tickers)
         return service_daily.annotate_manifest_compliance(manifest, disabled_screening)
+    cached_screening = _cached_daily_screening(tuple(entry["ticker"] for entry in manifest.get("tickers", [])))
+    if cached_screening.get("results"):
+        return service_daily.annotate_manifest_compliance(manifest, cached_screening)
     return manifest
 
 
@@ -440,6 +510,7 @@ def load_report(ticker: str, report_id: str) -> dict[str, Any]:
 def get_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
     watchlist = _resolve_screened_daily_watchlist(force_refresh=force_refresh)
     holdings = list(service_portfolio.portfolio_holdings_tickers(_portfolio_paths()))
+    coverage_tickers = _daily_coverage_tickers(tuple(watchlist["tickers"]))
     metadata = {
         "fetched_at": watchlist.get("fetched_at"),
         "screenshots": list(watchlist.get("screenshots", [])),
@@ -447,7 +518,7 @@ def get_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
         "stale": bool(watchlist.get("stale", False)),
         "existing_holdings": holdings,
         "raw_tickers": list(watchlist.get("raw_tickers", [])),
-        "screening": watchlist.get("screening", {}),
+        "screening": _cached_daily_screening(coverage_tickers),
     }
     return service_daily.get_daily_watchlist(str(watchlist["source"]), tuple(watchlist["tickers"]), DAILY_COVERAGE_POLICY, metadata)
 
@@ -485,6 +556,71 @@ def rerun_daily_halal_check(trade_date: str) -> dict[str, Any]:
     manifest = service_daily.annotate_manifest_compliance(manifest, screening)
     _write_daily_manifest(manifest)
     return get_daily_run(trade_date)
+
+
+def refresh_halal_screening_cache() -> dict[str, Any]:
+    tickers = _halal_screening_target_tickers()
+
+    with _halal_screening_refresh_lock:
+        _halal_screening_refresh_state.update(
+            {
+                "status": "running",
+                "started_at": datetime.utcnow().isoformat() + "Z",
+                "completed_at": None,
+                "current_ticker": None,
+                "processed": 0,
+                "total": len(tickers),
+                "checked": 0,
+                "cached": 0,
+                "errors": 0,
+                "results": [],
+                "error": None,
+            }
+        )
+
+    def record_progress(event: dict[str, Any]) -> None:
+        with _halal_screening_refresh_lock:
+            source = event.get("source")
+            status = event.get("status")
+            if status not in {"checking", "waiting_for_rate_limit"}:
+                _halal_screening_refresh_state["processed"] += 1
+                if source == "cache":
+                    _halal_screening_refresh_state["cached"] += 1
+                elif source == "api":
+                    _halal_screening_refresh_state["checked"] += 1
+                if status == "screening_error":
+                    _halal_screening_refresh_state["errors"] += 1
+                _halal_screening_refresh_state["results"].append(event)
+            _halal_screening_refresh_state["current_ticker"] = event.get("ticker")
+
+    try:
+        screening = halal_screening.screen_tickers(tickers, cache_path=_halal_screening_cache_path(), progress_callback=record_progress)
+    except Exception as exc:
+        with _halal_screening_refresh_lock:
+            _halal_screening_refresh_state.update(
+                {
+                    "status": "failed",
+                    "completed_at": datetime.utcnow().isoformat() + "Z",
+                    "error": str(exc),
+                }
+            )
+        raise
+
+    with _halal_screening_refresh_lock:
+        _halal_screening_refresh_state.update(
+            {
+                "status": "completed",
+                "completed_at": datetime.utcnow().isoformat() + "Z",
+                "current_ticker": None,
+                "processed": len(tickers),
+                "total": len(tickers),
+            }
+        )
+    return {
+        "tickers": list(tickers),
+        "screening": screening,
+        "cache": screening.get("cache", {}),
+    }
 
 
 def get_portfolio_state() -> dict[str, Any]:
