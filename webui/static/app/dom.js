@@ -43,6 +43,7 @@ export const settingsHalalCheckerEnabled = document.querySelector("#settings-hal
 export const settingsDailyRunTime = document.querySelector("#settings-daily-run-time");
 export const settingsSaveButton = document.querySelector("#settings-save");
 export const settingsRunHalalButton = document.querySelector("#settings-run-halal-check");
+export const settingsRunHalalForcedButton = document.querySelector("#settings-run-halal-check-forced");
 export const settingsMessage = document.querySelector("#settings-message");
 export const settingsSummary = document.querySelector("#settings-summary");
 export const settingsHalalStatus = document.querySelector("#settings-halal-status");

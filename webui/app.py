@@ -248,9 +248,9 @@ def rerun_daily_halal_screening(trade_date: str) -> dict:
 
 
 @app.post("/api/halal-screening/refresh")
-def refresh_halal_screening() -> dict:
+def refresh_halal_screening(force_refresh: bool = False) -> dict:
     try:
-        return refresh_halal_screening_cache()
+        return refresh_halal_screening_cache(force_refresh=force_refresh)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -4,6 +4,7 @@ import {
   settingsHalalStatus,
   settingsMessage,
   settingsRunHalalButton,
+  settingsRunHalalForcedButton,
   settingsSaveButton,
   settingsSummary,
 } from "./dom.js?v=settings-tab-1";
@@ -14,6 +15,7 @@ import { escapeHtml, setMessage } from "./utils.js?v=settings-tab-1";
 let halalStatusPoll = null;
 
 function renderSettings(payload) {
+  state.settings = payload;
   settingsHalalCheckerEnabled.checked = Boolean(payload.halal_checker_enabled);
   settingsDailyRunTime.value = payload.daily_run_time || "09:30";
   settingsSummary.className = "portfolio-banner";
@@ -51,6 +53,7 @@ function renderHalalStatus(payload) {
   const rows = payload.tickers || [];
   const running = refresh.status === "running";
   settingsRunHalalButton.disabled = running;
+  settingsRunHalalForcedButton.disabled = running;
   const progress = refresh.total ? `${refresh.processed || 0}/${refresh.total}` : "0/0";
   settingsHalalStatus.className = rows.length ? "daily-table-shell" : "daily-table-shell empty-state";
   settingsHalalStatus.innerHTML = `
@@ -133,20 +136,25 @@ export async function saveSettings() {
       return;
     }
     renderSettings(payload);
+    await loadDailyWatchlist();
+    await loadDailyManifest(state.activeDailyTradeDate, { quiet: true });
     setMessage(settingsMessage, "Saved settings.");
   } finally {
     settingsSaveButton.disabled = false;
   }
 }
 
-export async function runHalalScreeningRefresh() {
+export async function runHalalScreeningRefresh({ forceRefresh = false } = {}) {
   settingsRunHalalButton.disabled = true;
+  settingsRunHalalForcedButton.disabled = true;
   setMessage(settingsMessage, "");
   if (halalStatusPoll === null) {
     halalStatusPoll = setInterval(loadHalalScreeningStatus, 2500);
   }
   try {
-    const response = await fetch("/api/halal-screening/refresh", { method: "POST" });
+    const response = await fetch(`/api/halal-screening/refresh${forceRefresh ? "?force_refresh=true" : ""}`, {
+      method: "POST",
+    });
     const payload = await response.json();
     if (!response.ok) {
       setMessage(settingsMessage, payload.detail || "Failed to rerun halal tickers.", true);
@@ -158,15 +166,18 @@ export async function runHalalScreeningRefresh() {
     const cache = payload.cache || {};
     const checkedCount = cache.miss_count || 0;
     const cachedCount = cache.hit_count || 0;
-    setMessage(settingsMessage, `Halal screening complete. Checked ${checkedCount}, reused ${cachedCount} cached ticker${cachedCount === 1 ? "" : "s"}.`);
+    const reusedText = forceRefresh ? "ignored cached results" : `reused ${cachedCount} cached ticker${cachedCount === 1 ? "" : "s"}`;
+    setMessage(settingsMessage, `Halal screening complete. Checked ${checkedCount}, ${reusedText}.`);
   } finally {
     settingsRunHalalButton.disabled = false;
+    settingsRunHalalForcedButton.disabled = false;
   }
 }
 
 export function bindSettingsActions() {
   settingsSaveButton.addEventListener("click", saveSettings);
   settingsRunHalalButton.addEventListener("click", runHalalScreeningRefresh);
+  settingsRunHalalForcedButton.addEventListener("click", () => runHalalScreeningRefresh({ forceRefresh: true }));
   settingsHalalCheckerEnabled.addEventListener("change", () => setMessage(settingsMessage, ""));
   settingsDailyRunTime.addEventListener("input", () => setMessage(settingsMessage, ""));
 }

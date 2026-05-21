@@ -35,6 +35,13 @@ function screeningByTicker(screening = {}) {
   return Object.fromEntries((screening.results || []).map((item) => [item.ticker, item]));
 }
 
+function shouldShowCompliance(screening = null) {
+  if (state.settings?.halal_checker_enabled === false) {
+    return false;
+  }
+  return Boolean(screening?.enabled);
+}
+
 function complianceClass(compliance = null) {
   if (!compliance) {
     return "";
@@ -60,7 +67,7 @@ function complianceTitle(compliance = null) {
 }
 
 function renderTickerChips(tickers, className = "ticker-chip", screening = {}) {
-  const results = screeningByTicker(screening);
+  const results = shouldShowCompliance(screening) ? screeningByTicker(screening) : {};
   return tickers
     .map((ticker) => {
       const compliance = results[ticker] || null;
@@ -121,6 +128,7 @@ export function renderDailyWatchlist(payload) {
   const policy = payload.policy || [];
   const metadata = payload.metadata || {};
   const screening = metadata.screening || {};
+  const displayScreening = shouldShowCompliance(screening) ? screening : {};
   const sourceLabel = (payload.source || "unknown").replaceAll("_", " ");
   const fetchedAt = metadata.fetched_at ? new Date(metadata.fetched_at).toLocaleString() : "n/a";
   const freshnessLabel = metadata.stale ? "Last successful refresh" : "Last refresh";
@@ -130,9 +138,9 @@ export function renderDailyWatchlist(payload) {
 
   dailyWatchlist.className = tickers.length ? "ticker-list" : "ticker-list empty-state";
   dailyWatchlist.innerHTML = tickers.length
-    ? renderTickerChips(tickers, "ticker-chip", screening)
+    ? renderTickerChips(tickers, "ticker-chip", displayScreening)
     : "No watchlist configured.";
-  renderWatchlistHoldings(metadata, tickers);
+  renderWatchlistHoldings({ ...metadata, screening: displayScreening }, tickers);
   renderWatchlistDiff(state.dailyWatchlistDiff);
 
   dailyPolicy.className = policy.length ? "policy-list" : "policy-list empty-state";
@@ -151,7 +159,7 @@ export function renderDailyWatchlist(payload) {
   state.dailyWatchlistPayload = payload;
 }
 
-export function renderDailySummary(summary = null) {
+export function renderDailySummary(summary = null, { screeningEnabled = true } = {}) {
   if (!summary) {
     dailySummary.className = "summary-strip empty-state";
     dailySummary.textContent = "Prepare a daily run to create the manifest.";
@@ -165,9 +173,10 @@ export function renderDailySummary(summary = null) {
     ["Running", summary.running],
     ["Completed", summary.completed],
     ["Failed", summary.failed],
-    ["Blocked", summary.blocked || 0],
-    ["Check errors", summary.screening_errors || 0],
   ];
+  if (screeningEnabled) {
+    items.push(["Blocked", summary.blocked || 0], ["Check errors", summary.screening_errors || 0]);
+  }
 
   dailySummary.className = "summary-strip";
   dailySummary.innerHTML = items
@@ -185,10 +194,10 @@ export function renderDailySummary(summary = null) {
 export function renderDailyManifest(payload) {
   state.activeDailyTradeDate = payload.trade_date || dailyDateInput.value.trim();
   dailyStatusDate.textContent = state.activeDailyTradeDate;
-  renderDailySummary(payload.summary || null);
   const watchlistScreening = state.dailyWatchlistPayload?.metadata?.screening || {};
-  const screeningEnabled = Boolean(payload.screening?.enabled || watchlistScreening.enabled);
+  const screeningEnabled = shouldShowCompliance(payload.screening) || shouldShowCompliance(watchlistScreening);
   const watchlistCompliance = screeningByTicker(watchlistScreening);
+  renderDailySummary(payload.summary || null, { screeningEnabled });
 
   const tickers = payload.tickers || [];
   if (!tickers.length) {
@@ -203,7 +212,7 @@ export function renderDailyManifest(payload) {
       <thead>
         <tr>
           <th>Ticker</th>
-          <th>Shariah</th>
+          ${screeningEnabled ? "<th>Shariah</th>" : ""}
           <th>Status</th>
           <th>Rating</th>
           <th>Report</th>
@@ -219,7 +228,7 @@ export function renderDailyManifest(payload) {
               return `
               <tr class="${screeningEnabled && isBlockingCompliance(compliance) ? "daily-row-blocked" : ""}">
                 <td><strong>${escapeHtml(entry.ticker)}</strong></td>
-                <td>${renderComplianceBadge(screeningEnabled ? compliance : null)}</td>
+                ${screeningEnabled ? `<td>${renderComplianceBadge(compliance)}</td>` : ""}
                 <td><span class="${statusClass(entry.status)}">${escapeHtml(entry.status)}</span></td>
                 <td>${escapeHtml(entry.rating || "n/a")}</td>
                 <td>${entry.report_path ? `<code>${escapeHtml(entry.report_path)}</code>` : "n/a"}</td>
