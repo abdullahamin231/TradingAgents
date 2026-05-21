@@ -168,6 +168,29 @@
   color: var(--danger);
 }
 
+.ticker-chip.shariah-blocked,
+.compliance-badge.shariah-blocked {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.ticker-chip.shariah-compliant,
+.compliance-badge.shariah-compliant {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.compliance-badge {
+  display: inline-block;
+  border: 1px solid var(--line);
+  padding: 0.25rem 0.4rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .summary-item strong,
 .report-meta-item strong {
   font-size: 0.95rem;
@@ -194,6 +217,14 @@
   background: var(--bg-strong);
   font-weight: 600;
   color: var(--muted);
+}
+
+.daily-row-blocked {
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.daily-row-blocked td:first-child strong {
+  color: var(--danger);
 }
 
 .error-cell {

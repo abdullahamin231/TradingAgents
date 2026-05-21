@@ -20,7 +20,7 @@ from tradingagents.llm_clients.model_catalog import get_model_options
 from tradingagents.llm_clients.provider_urls import get_ollama_base_url
 from tradingagents.reporting import save_complete_report
 
-from . import service_alpaca, service_daily, service_portfolio, service_reports
+from . import halal_screening, service_alpaca, service_daily, service_portfolio, service_reports
 from .seeking_alpha import fetch_seeking_alpha_watchlist
 from .service_helpers import PathsConfig, SAVED_REPORT_ID_PATTERN, TOKEN_USAGE_FILENAME, atomic_write_json, markdown_to_html, token_usage_path
 from .service_usage import TokenUsageCollector, get_token_usage_payload, iter_saved_usage_records
@@ -165,6 +165,18 @@ def _resolve_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
     return payload.to_payload()
 
 
+def _resolve_screened_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
+    watchlist = _resolve_daily_watchlist(force_refresh=force_refresh)
+    screening = halal_screening.screen_tickers(tuple(watchlist.get("tickers", ())))
+    return {
+        **watchlist,
+        "raw_tickers": list(watchlist.get("tickers", ())),
+        "tickers": screening["tickers"],
+        "eligible_tickers": screening["kept_tickers"],
+        "screening": screening,
+    }
+
+
 def _ensure_reports_layout() -> None:
     service_reports.ensure_reports_layout(_paths(), REPORTS_SYSTEM_DIRS)
 
@@ -264,18 +276,21 @@ def _daily_coverage_tickers(watchlist_tickers: tuple[str, ...]) -> tuple[str, ..
 
 
 def _load_daily_manifest(trade_date: str) -> dict[str, Any]:
-    watchlist = _resolve_daily_watchlist()
-    return service_daily.load_daily_manifest(
+    watchlist = _resolve_screened_daily_watchlist()
+    coverage_tickers = _daily_coverage_tickers(tuple(watchlist["tickers"]))
+    screening = halal_screening.screen_tickers(coverage_tickers)
+    manifest = service_daily.load_daily_manifest(
         trade_date,
         reports_dir=REPORTS_DIR,
         dirname=DAILY_RUNS_DIRNAME,
         lock=_daily_manifest_lock,
         source=str(watchlist["source"]),
-        default_daily_tickers=_daily_coverage_tickers(tuple(watchlist["tickers"])),
+        default_daily_tickers=coverage_tickers,
         watchlist_tickers=tuple(watchlist["tickers"]),
         daily_coverage_policy=DAILY_COVERAGE_POLICY,
         snapshot_loader=_saved_report_snapshot,
     )
+    return service_daily.annotate_manifest_compliance(manifest, screening)
 
 
 def _write_daily_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
@@ -388,7 +403,7 @@ def load_report(ticker: str, report_id: str) -> dict[str, Any]:
 
 
 def get_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
-    watchlist = _resolve_daily_watchlist(force_refresh=force_refresh)
+    watchlist = _resolve_screened_daily_watchlist(force_refresh=force_refresh)
     holdings = list(service_portfolio.portfolio_holdings_tickers(_portfolio_paths()))
     metadata = {
         "fetched_at": watchlist.get("fetched_at"),
@@ -396,13 +411,16 @@ def get_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
         "error": watchlist.get("error"),
         "stale": bool(watchlist.get("stale", False)),
         "existing_holdings": holdings,
+        "raw_tickers": list(watchlist.get("raw_tickers", [])),
+        "screening": watchlist.get("screening", {}),
     }
     return service_daily.get_daily_watchlist(str(watchlist["source"]), tuple(watchlist["tickers"]), DAILY_COVERAGE_POLICY, metadata)
 
 
 def prepare_daily_run(trade_date: str) -> dict[str, Any]:
-    watchlist = _resolve_daily_watchlist()
+    watchlist = _resolve_screened_daily_watchlist()
     coverage_tickers = _daily_coverage_tickers(tuple(watchlist["tickers"]))
+    screening = halal_screening.screen_tickers(coverage_tickers)
     return service_daily.prepare_daily_run(
         trade_date,
         lock=_daily_manifest_lock,
@@ -413,12 +431,25 @@ def prepare_daily_run(trade_date: str) -> dict[str, Any]:
         manifest_loader=_load_daily_manifest,
         manifest_writer=_write_daily_manifest,
         snapshot_loader=_saved_report_snapshot,
+        screening=screening,
         get_daily_run_fn=get_daily_run,
     )
 
 
 def get_daily_run(trade_date: str) -> dict[str, Any]:
     return service_daily.get_daily_run(trade_date, _load_daily_manifest)
+
+
+def rerun_daily_halal_check(trade_date: str) -> dict[str, Any]:
+    watchlist = _resolve_screened_daily_watchlist()
+    coverage_tickers = _daily_coverage_tickers(tuple(watchlist["tickers"]))
+    screening = halal_screening.screen_tickers(coverage_tickers)
+    manifest = _load_daily_manifest(trade_date)
+    manifest["source"] = str(watchlist["source"])
+    manifest["watchlist_tickers"] = list(watchlist["tickers"])
+    manifest = service_daily.annotate_manifest_compliance(manifest, screening)
+    _write_daily_manifest(manifest)
+    return get_daily_run(trade_date)
 
 
 def get_portfolio_state() -> dict[str, Any]:
@@ -468,7 +499,7 @@ def build_daily_rebalance_plan(
     apply_targets: bool = False,
 ) -> dict[str, Any]:
     manifest = get_daily_run(trade_date)
-    watchlist = _resolve_daily_watchlist()
+    watchlist = _resolve_screened_daily_watchlist()
     previous_manifest = service_portfolio.latest_previous_manifest(
         trade_date,
         REPORTS_DIR / DAILY_RUNS_DIRNAME,

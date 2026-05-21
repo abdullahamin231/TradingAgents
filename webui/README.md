@@ -26,6 +26,7 @@ export TRADINGAGENTS_WEB_MAX_WORKERS=4
 - Queues only incomplete tickers for the selected date.
 - Supports retrying failed tickers.
 - Uses a Seeking Alpha-backed watchlist instead of the hardcoded default when the fetch succeeds.
+- Can screen the Daily Coverage list through HalalScreener before queueing analysis.
 - Includes a `Rescrape tickers` button to force-refresh the watchlist.
 
 ### Saved Reports
@@ -48,6 +49,32 @@ Current implementation:
 - prefers direct API extraction from Seeking Alpha using cookies from a Playwright `storageState` file
 - reuses the most recent cached watchlist if a refresh fails, and falls back to the static `DEFAULT_DAILY_TICKERS` list only when no usable cache exists
 - stores preserved watchlist/debug artifacts under `webui_artifacts/seeking_alpha_watchlist/`
+
+## Halal Screening
+
+Zoya does not provide a free API key for this workflow. Musaffa documents B2B access with a `secretKey` and `clientId`. This app uses HalalScreener because its developer docs expose bearer API key access.
+
+If you want the Daily Coverage list to block non-halal names, configure HalalScreener screening:
+
+```bash
+export HALALSCREENER_API_KEY=your_halalscreener_api_key
+```
+
+Optional auth overrides:
+
+```bash
+export HALALSCREENER_API_URL_TEMPLATE='https://halalscreener.app/api/v1/screen?symbol={ticker}'
+export HALALSCREENER_API_AUTH_HEADER=Authorization
+export HALALSCREENER_API_AUTH_SCHEME=Bearer
+export HALALSCREENER_API_TIMEOUT_SECONDS=10
+```
+
+Notes:
+
+- screening is refreshed when a daily manifest is prepared or loaded
+- `questionable`, `doubtful`, `not covered`, and explicitly non-compliant names are blocked
+- blocked names stay visible and are marked red in the UI, but daily queueing skips them
+- if HalalScreener is not configured, the WebUI falls back to the unfiltered list
 
 Set the auth state path before running WebUI:
 

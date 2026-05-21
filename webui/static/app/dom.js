@@ -48,6 +48,7 @@ export const onDemandMessage = document.querySelector("#on-demand-message");
 export const dailyPrepareButton = document.querySelector("#prepare-daily-run");
 export const dailyRunMissingButton = document.querySelector("#run-missing-daily");
 export const dailyRescrapeButton = document.querySelector("#rescrape-daily-watchlist");
+export const dailyRerunHalalButton = document.querySelector("#rerun-halal-check");
 export const dailyDateInput = document.querySelector("#daily-date");
 export const dailyMessage = document.querySelector("#daily-message");
 

@@ -112,11 +112,35 @@ def find_daily_entry(manifest: dict[str, Any], ticker: str) -> dict[str, Any]:
 
 
 def manifest_summary(manifest: dict[str, Any]) -> dict[str, int]:
-    summary = {"pending": 0, "queued": 0, "running": 0, "completed": 0, "failed": 0}
+    summary = {"pending": 0, "queued": 0, "running": 0, "completed": 0, "failed": 0, "blocked": 0}
     for entry in manifest["tickers"]:
+        if entry.get("shariah_compliance", {}).get("allowed") is False:
+            summary["blocked"] += 1
         summary[entry["status"]] = summary.get(entry["status"], 0) + 1
     summary["total"] = len(manifest["tickers"])
     return summary
+
+
+def annotate_manifest_compliance(manifest: dict[str, Any], screening: dict[str, Any]) -> dict[str, Any]:
+    results = {
+        item.get("ticker"): item
+        for item in screening.get("results", [])
+        if isinstance(item, dict) and item.get("ticker")
+    }
+    manifest["screening"] = screening
+    for entry in manifest.get("tickers", []):
+        result = results.get(entry.get("ticker"))
+        if result is None:
+            entry.pop("shariah_compliance", None)
+            continue
+        entry["shariah_compliance"] = {
+            "provider": result.get("provider", screening.get("provider", "halalscreener")),
+            "allowed": bool(result.get("allowed")),
+            "status": result.get("status") or "unknown",
+            "raw_status": result.get("raw_status"),
+            "error": result.get("error"),
+        }
+    return manifest
 
 
 def update_daily_run_job_state(
@@ -182,6 +206,7 @@ def prepare_daily_run(
     manifest_loader: Callable[[str], dict[str, Any]],
     manifest_writer: Callable[[dict[str, Any]], dict[str, Any]],
     snapshot_loader: Callable[[str, str], dict[str, Any] | None],
+    screening: dict[str, Any] | None,
     get_daily_run_fn: Callable[[str], dict[str, Any]],
 ) -> dict[str, Any]:
     with lock:
@@ -201,6 +226,8 @@ def prepare_daily_run(
                 entry["job_id"] = entry.get("job_id")
             tickers.append(entry)
         manifest["tickers"] = tickers
+        if screening is not None:
+            annotate_manifest_compliance(manifest, screening)
         manifest_writer(manifest)
         return get_daily_run_fn(trade_date)
 
@@ -233,6 +260,10 @@ def queue_daily_run_entries(
         queued: list[dict[str, Any]] = []
 
         for entry in manifest_payload["tickers"]:
+            compliance = entry.get("shariah_compliance") or {}
+            if compliance.get("allowed") is False:
+                entry["error"] = f"Blocked by Shariah screening: {compliance.get('status') or 'unknown'}"
+                continue
             if selected and entry["ticker"] not in selected:
                 continue
             if entry["status"] == "completed":

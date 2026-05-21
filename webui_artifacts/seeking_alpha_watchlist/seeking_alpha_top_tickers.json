@@ -3,28 +3,28 @@
   "tickers": [
     "MU",
     "SNDK",
-    "POET",
     "MXL",
     "LITE",
     "AXTI",
-    "NBIS",
-    "NVTS",
+    "POET",
     "AMD",
+    "NVTS",
+    "NBIS",
     "TTMI",
-    "ICHR",
     "FLEX",
+    "CNC",
+    "ICHR",
     "UCTT",
-    "ASX",
     "XOM",
     "PBR.A",
-    "SNEX",
+    "PENG",
     "PBR",
-    "CRDO",
-    "NEXA"
+    "PUMP",
+    "ASX"
   ],
-  "fetched_at": "2026-05-15T16:24:48.215982Z",
+  "fetched_at": "2026-05-21T16:28:52.402287Z",
   "screenshots": [
-    "/home/abdullah/repos/work/algozen/TradingAgents/webui_artifacts/seeking_alpha_watchlist/debug_runs/15-May-2026-09-24-PM/01-screener_results.json"
+    "/home/abdullah/repos/work/algozen/TradingAgents/webui_artifacts/seeking_alpha_watchlist/debug_runs/21-May-2026-09-28-PM/01-screener_results.json"
   ],
   "error": null,
   "stale": false

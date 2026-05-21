@@ -26,6 +26,7 @@ from .service import (
     prepare_daily_run,
     queue_daily_run_entries,
     queue_single_ticker_run,
+    rerun_daily_halal_check,
     get_token_usage,
 )
 
@@ -172,6 +173,14 @@ def daily_run(trade_date: str) -> dict:
 def prepare_daily_coverage(trade_date: str) -> dict:
     try:
         return prepare_daily_run(trade_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/daily-runs/{trade_date}/halal-check")
+def rerun_daily_halal_screening(trade_date: str) -> dict:
+    try:
+        return rerun_daily_halal_check(trade_date)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -3,6 +3,7 @@ import {
   dailyMessage,
   dailyPolicy,
   dailyPrepareButton,
+  dailyRerunHalalButton,
   dailyRescrapeButton,
   dailyRunMissingButton,
   dailyStatusDate,
@@ -31,8 +32,35 @@ function diffTickers(previousTickers, nextTickers) {
   };
 }
 
-function renderTickerChips(tickers, className = "ticker-chip") {
-  return tickers.map((ticker) => `<span class="${className}">${escapeHtml(ticker)}</span>`).join("");
+function screeningByTicker(screening = {}) {
+  return Object.fromEntries((screening.results || []).map((item) => [item.ticker, item]));
+}
+
+function complianceClass(compliance = null) {
+  if (!compliance) {
+    return "";
+  }
+  return compliance.allowed === false ? " shariah-blocked" : " shariah-compliant";
+}
+
+function complianceTitle(compliance = null) {
+  if (!compliance) {
+    return "";
+  }
+  const provider = compliance.provider || "halal screener";
+  const status = compliance.status || "unknown";
+  const error = compliance.error ? `. ${compliance.error}` : "";
+  return ` title="${escapeHtml(`${provider}: ${status}${error}`)}"`;
+}
+
+function renderTickerChips(tickers, className = "ticker-chip", screening = {}) {
+  const results = screeningByTicker(screening);
+  return tickers
+    .map((ticker) => {
+      const compliance = results[ticker] || null;
+      return `<span class="${className}${complianceClass(compliance)}"${complianceTitle(compliance)}>${escapeHtml(ticker)}</span>`;
+    })
+    .join("");
 }
 
 function renderWatchlistHoldings(metadata = {}, tickers = []) {
@@ -85,6 +113,7 @@ export function renderDailyWatchlist(payload) {
   const tickers = uniqueTickers(payload.tickers || []);
   const policy = payload.policy || [];
   const metadata = payload.metadata || {};
+  const screening = metadata.screening || {};
   const sourceLabel = (payload.source || "unknown").replaceAll("_", " ");
   const fetchedAt = metadata.fetched_at ? new Date(metadata.fetched_at).toLocaleString() : "n/a";
   const freshnessLabel = metadata.stale ? "Last successful refresh" : "Last refresh";
@@ -94,7 +123,7 @@ export function renderDailyWatchlist(payload) {
 
   dailyWatchlist.className = tickers.length ? "ticker-list" : "ticker-list empty-state";
   dailyWatchlist.innerHTML = tickers.length
-    ? renderTickerChips(tickers)
+    ? renderTickerChips(tickers, "ticker-chip", screening)
     : "No watchlist configured.";
   renderWatchlistHoldings(metadata, tickers);
   renderWatchlistDiff(state.dailyWatchlistDiff);
@@ -129,6 +158,7 @@ export function renderDailySummary(summary = null) {
     ["Running", summary.running],
     ["Completed", summary.completed],
     ["Failed", summary.failed],
+    ["Blocked", summary.blocked || 0],
   ];
 
   dailySummary.className = "summary-strip";
@@ -162,6 +192,7 @@ export function renderDailyManifest(payload) {
       <thead>
         <tr>
           <th>Ticker</th>
+          <th>Shariah</th>
           <th>Status</th>
           <th>Rating</th>
           <th>Report</th>
@@ -173,8 +204,9 @@ export function renderDailyManifest(payload) {
         ${tickers
           .map(
             (entry) => `
-              <tr>
+              <tr class="${entry.shariah_compliance?.allowed === false ? "daily-row-blocked" : ""}">
                 <td><strong>${escapeHtml(entry.ticker)}</strong></td>
+                <td>${renderComplianceBadge(entry.shariah_compliance || null)}</td>
                 <td><span class="${statusClass(entry.status)}">${escapeHtml(entry.status)}</span></td>
                 <td>${escapeHtml(entry.rating || "n/a")}</td>
                 <td>${entry.report_path ? `<code>${escapeHtml(entry.report_path)}</code>` : "n/a"}</td>
@@ -195,6 +227,15 @@ export function renderDailyManifest(payload) {
       </tbody>
     </table>
   `;
+}
+
+function renderComplianceBadge(compliance = null) {
+  if (!compliance) {
+    return '<span class="compliance-badge compliance-unknown">not checked</span>';
+  }
+  const status = compliance.status || "unknown";
+  const label = compliance.allowed === false ? `blocked · ${status}` : status;
+  return `<span class="compliance-badge${complianceClass(compliance)}"${complianceTitle(compliance)}>${escapeHtml(label)}</span>`;
 }
 
 export async function loadDailyWatchlist({ forceRefresh = false } = {}) {
@@ -229,6 +270,34 @@ export async function rescrapeDailyWatchlist() {
     );
   } finally {
     dailyRescrapeButton.disabled = false;
+  }
+}
+
+export async function rerunHalalCheck() {
+  const tradeDate = dailyDateInput.value.trim();
+  if (!isValidTradeDate(tradeDate)) {
+    setMessage(dailyMessage, "Date must use YYYY-MM-DD.", true);
+    return;
+  }
+
+  dailyRerunHalalButton.disabled = true;
+  setMessage(dailyMessage, "");
+  try {
+    const response = await fetch(`/api/daily-runs/${encodeURIComponent(tradeDate)}/halal-check`, { method: "POST" });
+    const payload = await response.json();
+    if (!response.ok) {
+      setMessage(dailyMessage, payload.detail || "Failed to rerun halal checker.", true);
+      return;
+    }
+    await loadDailyWatchlist();
+    renderDailyManifest(payload);
+    const blockedCount = payload.summary?.blocked || 0;
+    setMessage(
+      dailyMessage,
+      `Reran halal checker for ${tradeDate}. Blocked ${blockedCount} ticker${blockedCount === 1 ? "" : "s"}.`
+    );
+  } finally {
+    dailyRerunHalalButton.disabled = false;
   }
 }
 

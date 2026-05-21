@@ -2,6 +2,7 @@ import {
   dailyDateInput,
   dailyMessage,
   dailyPrepareButton,
+  dailyRerunHalalButton,
   dailyRescrapeButton,
   dailyRunMissingButton,
   dailyStatusDate,
@@ -18,7 +19,7 @@ import {
   tabButtons,
   tickerSelect,
 } from "./dom.js?v=portfolio-tab-5";
-import { loadDailyManifest, loadDailyWatchlist, prepareDailyRun, rescrapeDailyWatchlist, retryDailyTicker, runMissingDaily } from "./daily.js?v=portfolio-tab-5";
+import { loadDailyManifest, loadDailyWatchlist, prepareDailyRun, rerunHalalCheck, rescrapeDailyWatchlist, retryDailyTicker, runMissingDaily } from "./daily.js?v=portfolio-tab-5";
 import { fetchJobs } from "./jobs.js?v=portfolio-tab-5";
 import { submitOnDemandRun } from "./on-demand.js?v=portfolio-tab-5";
 import { bindPortfolioActions, loadCurrentPortfolio } from "./portfolio.js?v=portfolio-tab-5";
@@ -48,6 +49,7 @@ function registerEventHandlers() {
   dailyPrepareButton.addEventListener("click", prepareDailyRun);
   dailyRunMissingButton.addEventListener("click", runMissingDaily);
   dailyRescrapeButton.addEventListener("click", rescrapeDailyWatchlist);
+  dailyRerunHalalButton.addEventListener("click", rerunHalalCheck);
   dailyStatusTable.addEventListener("click", (event) => {
     const button = event.target.closest("[data-retry-ticker]");
     if (!button) {
