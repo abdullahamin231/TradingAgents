@@ -259,9 +259,10 @@ def queue_daily_run_entries(
         selected = {safe_ticker_component(t) for t in tickers} if tickers else None
         queued: list[dict[str, Any]] = []
 
+        screening_enabled = bool((manifest_payload.get("screening") or {}).get("enabled"))
         for entry in manifest_payload["tickers"]:
             compliance = entry.get("shariah_compliance") or {}
-            if compliance.get("allowed") is False:
+            if screening_enabled and compliance.get("allowed") is False:
                 entry["error"] = f"Blocked by Shariah screening: {compliance.get('status') or 'unknown'}"
                 continue
             if selected and entry["ticker"] not in selected:

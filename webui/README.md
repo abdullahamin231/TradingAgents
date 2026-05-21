@@ -38,6 +38,10 @@ export TRADINGAGENTS_WEB_MAX_WORKERS=4
 - Aggregates OpenCode token telemetry across saved runs and in-memory jobs.
 - Shows totals and time-series charts.
 
+### Settings
+- Toggle the halal checker. It defaults to enabled; when disabled, Shariah compliance is not checked or marked.
+- Configure the automatic Daily Coverage run time. It defaults to `09:30` in `America/New_York`.
+
 ## Seeking Alpha Watchlist
 
 The Daily Coverage watchlist is fetched from Seeking Alpha screen:
@@ -74,6 +78,7 @@ Notes:
 - screening is refreshed when a daily manifest is prepared or loaded
 - `questionable`, `doubtful`, `not covered`, and explicitly non-compliant names are blocked
 - blocked names stay visible and are marked red in the UI, but daily queueing skips them
+- the Settings tab can disable halal screening completely
 - if HalalScreener is not configured, the WebUI falls back to the unfiltered list
 
 Set the auth state path before running WebUI:

@@ -58,6 +58,30 @@
   margin-top: 0.75rem;
 }
 
+.field-checkbox {
+  gap: 0.45rem;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.checkbox-row input {
+  width: 1.05rem;
+  min-height: 1.05rem;
+  padding: 0;
+  border-color: var(--line);
+}
+
+.checkbox-row input:checked {
+  background: var(--success);
+  border-color: var(--success);
+}
+
 .jobs-list,
 .policy-list,
 .ticker-summary,

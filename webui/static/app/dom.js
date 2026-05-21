@@ -39,6 +39,11 @@ export const portfolioExecutionTable = document.querySelector("#portfolio-execut
 export const tokenUsageSummary = document.querySelector("#token-usage-summary");
 export const tokenUsageCharts = document.querySelector("#token-usage-charts");
 export const tokenUsageRuns = document.querySelector("#token-usage-runs");
+export const settingsHalalCheckerEnabled = document.querySelector("#settings-halal-checker-enabled");
+export const settingsDailyRunTime = document.querySelector("#settings-daily-run-time");
+export const settingsSaveButton = document.querySelector("#settings-save");
+export const settingsMessage = document.querySelector("#settings-message");
+export const settingsSummary = document.querySelector("#settings-summary");
 
 export const onDemandSubmitButton = document.querySelector("#on-demand-submit");
 export const onDemandTickerInput = document.querySelector("#on-demand-ticker");

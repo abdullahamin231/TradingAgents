@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
-from datetime import date
+import threading
+from datetime import date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -15,19 +17,22 @@ from .service import (
     build_daily_rebalance_plan,
     execute_daily_rebalance_plan,
     get_daily_run,
+    get_settings,
     get_daily_watchlist,
     get_portfolio_state,
-    sync_alpaca_paper_portfolio,
-    update_portfolio_state,
+    get_token_usage,
     list_llm_providers,
-    list_report_tickers,
     list_report_runs,
+    list_report_tickers,
     load_report,
+    mark_scheduled_daily_run,
     prepare_daily_run,
     queue_daily_run_entries,
     queue_single_ticker_run,
     rerun_daily_halal_check,
-    get_token_usage,
+    sync_alpaca_paper_portfolio,
+    update_settings,
+    update_portfolio_state,
 )
 
 
@@ -36,6 +41,8 @@ app = FastAPI(title="TradingAgents Web Interface")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 job_manager = TradingJobManager(max_workers=int(os.getenv("TRADINGAGENTS_WEB_MAX_WORKERS", "4")))
+_scheduler_stop = threading.Event()
+_scheduler_thread: threading.Thread | None = None
 
 
 class RunRequest(BaseModel):
@@ -54,6 +61,11 @@ class DailyRunQueueRequest(BaseModel):
     provider: str = Field(default="opencode", min_length=1, max_length=32)
     quick_model: str = Field(default="", max_length=128)
     deep_model: str = Field(default="", max_length=128)
+
+
+class SettingsRequest(BaseModel):
+    halal_checker_enabled: bool = True
+    daily_run_time: str = Field(default="09:30", pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
 
 class PortfolioPositionRequest(BaseModel):
@@ -83,6 +95,42 @@ class RebalanceExecutionRequest(BaseModel):
     max_positions: int = Field(default=10, ge=1, le=50)
 
 
+def _scheduler_loop() -> None:
+    while not _scheduler_stop.wait(30):
+        current_settings = get_settings()
+        daily_run_time = str(current_settings.get("daily_run_time") or "09:30")
+        now = datetime.now(ZoneInfo(str(current_settings.get("daily_run_timezone") or "America/New_York")))
+        run_time = datetime.strptime(daily_run_time, "%H:%M").time()
+        run_date = now.date().isoformat()
+        if now.time() < run_time:
+            continue
+        if current_settings.get("last_scheduled_daily_run_date") == run_date:
+            continue
+        try:
+            prepare_daily_run(run_date)
+            queue_daily_run_entries(job_manager, run_date)
+            mark_scheduled_daily_run(run_date)
+        except Exception:
+            continue
+
+
+@app.on_event("startup")
+def start_daily_scheduler() -> None:
+    global _scheduler_thread
+    if _scheduler_thread is not None and _scheduler_thread.is_alive():
+        return
+    _scheduler_stop.clear()
+    _scheduler_thread = threading.Thread(target=_scheduler_loop, name="daily-coverage-scheduler", daemon=True)
+    _scheduler_thread.start()
+
+
+@app.on_event("shutdown")
+def stop_daily_scheduler() -> None:
+    _scheduler_stop.set()
+    if _scheduler_thread is not None:
+        _scheduler_thread.join(timeout=2)
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
@@ -102,6 +150,19 @@ def get_jobs() -> dict:
 @app.get("/api/providers")
 def get_providers() -> dict:
     return {"providers": list_llm_providers()}
+
+
+@app.get("/api/settings")
+def read_settings() -> dict:
+    return get_settings()
+
+
+@app.put("/api/settings")
+def put_settings(payload: SettingsRequest) -> dict:
+    try:
+        return update_settings(payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/jobs/{job_id}")

@@ -20,7 +20,7 @@ from tradingagents.llm_clients.model_catalog import get_model_options
 from tradingagents.llm_clients.provider_urls import get_ollama_base_url
 from tradingagents.reporting import save_complete_report
 
-from . import halal_screening, service_alpaca, service_daily, service_portfolio, service_reports
+from . import halal_screening, service_alpaca, service_daily, service_portfolio, service_reports, settings
 from .seeking_alpha import fetch_seeking_alpha_watchlist
 from .service_helpers import PathsConfig, SAVED_REPORT_ID_PATTERN, TOKEN_USAGE_FILENAME, atomic_write_json, markdown_to_html, token_usage_path
 from .service_usage import TokenUsageCollector, get_token_usage_payload, iter_saved_usage_records
@@ -156,6 +156,39 @@ def _portfolio_paths() -> service_portfolio.PortfolioPaths:
     return service_portfolio.PortfolioPaths(REPORTS_DIR, PORTFOLIO_DIRNAME)
 
 
+def _settings_path() -> Path:
+    return REPO_ROOT / "webui_artifacts" / "settings.json"
+
+
+def get_settings() -> dict[str, Any]:
+    return settings.load_settings(_settings_path())
+
+
+def update_settings(payload: dict[str, Any]) -> dict[str, Any]:
+    return settings.update_settings(_settings_path(), payload)
+
+
+def mark_scheduled_daily_run(run_date: str) -> dict[str, Any]:
+    return settings.mark_scheduled_daily_run(_settings_path(), run_date)
+
+
+def _screen_daily_tickers(tickers: tuple[str, ...]) -> dict[str, Any]:
+    app_settings = get_settings()
+    if not app_settings.get("halal_checker_enabled", True):
+        normalized = list(dict.fromkeys(safe_ticker_component(ticker.strip().upper()) for ticker in tickers if ticker))
+        return {
+            "enabled": False,
+            "provider": "halalscreener",
+            "reason": "disabled_by_settings",
+            "tickers": normalized,
+            "kept_tickers": normalized,
+            "excluded": [],
+            "results": [],
+            "error": None,
+        }
+    return halal_screening.screen_tickers(tickers)
+
+
 def _resolve_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
     payload = fetch_seeking_alpha_watchlist(
         cache_dir=_daily_watchlist_cache_dir(),
@@ -167,7 +200,7 @@ def _resolve_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
 
 def _resolve_screened_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
     watchlist = _resolve_daily_watchlist(force_refresh=force_refresh)
-    screening = halal_screening.screen_tickers(tuple(watchlist.get("tickers", ())))
+    screening = _screen_daily_tickers(tuple(watchlist.get("tickers", ())))
     return {
         **watchlist,
         "raw_tickers": list(watchlist.get("tickers", ())),
@@ -278,7 +311,7 @@ def _daily_coverage_tickers(watchlist_tickers: tuple[str, ...]) -> tuple[str, ..
 def _load_daily_manifest(trade_date: str) -> dict[str, Any]:
     watchlist = _resolve_screened_daily_watchlist()
     coverage_tickers = _daily_coverage_tickers(tuple(watchlist["tickers"]))
-    screening = halal_screening.screen_tickers(coverage_tickers)
+    screening = _screen_daily_tickers(coverage_tickers)
     manifest = service_daily.load_daily_manifest(
         trade_date,
         reports_dir=REPORTS_DIR,
@@ -420,7 +453,7 @@ def get_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
 def prepare_daily_run(trade_date: str) -> dict[str, Any]:
     watchlist = _resolve_screened_daily_watchlist()
     coverage_tickers = _daily_coverage_tickers(tuple(watchlist["tickers"]))
-    screening = halal_screening.screen_tickers(coverage_tickers)
+    screening = _screen_daily_tickers(coverage_tickers)
     return service_daily.prepare_daily_run(
         trade_date,
         lock=_daily_manifest_lock,
@@ -443,7 +476,7 @@ def get_daily_run(trade_date: str) -> dict[str, Any]:
 def rerun_daily_halal_check(trade_date: str) -> dict[str, Any]:
     watchlist = _resolve_screened_daily_watchlist()
     coverage_tickers = _daily_coverage_tickers(tuple(watchlist["tickers"]))
-    screening = halal_screening.screen_tickers(coverage_tickers)
+    screening = _screen_daily_tickers(coverage_tickers)
     manifest = _load_daily_manifest(trade_date)
     manifest["source"] = str(watchlist["source"])
     manifest["watchlist_tickers"] = list(watchlist["tickers"])

@@ -1,3 +1,3 @@
-import { initApp } from "./app/main.js?v=portfolio-tab-5";
+import { initApp } from "./app/main.js?v=settings-tab-1";
 
 initApp();

@@ -13,11 +13,11 @@ import {
   dailyWatchlistDiff,
   dailyWatchlistHoldings,
   dailyWatchlistMeta,
-} from "./dom.js?v=portfolio-tab-5";
-import { fetchJobs } from "./jobs.js?v=portfolio-tab-5";
-import { providerPayload } from "./providers.js?v=portfolio-tab-5";
-import { state } from "./state.js?v=portfolio-tab-5";
-import { escapeHtml, isValidTradeDate, setMessage, statusClass } from "./utils.js?v=portfolio-tab-5";
+} from "./dom.js?v=settings-tab-1";
+import { fetchJobs } from "./jobs.js?v=settings-tab-1";
+import { providerPayload } from "./providers.js?v=settings-tab-1";
+import { state } from "./state.js?v=settings-tab-1";
+import { escapeHtml, isValidTradeDate, setMessage, statusClass } from "./utils.js?v=settings-tab-1";
 
 function uniqueTickers(tickers) {
   return [...new Set((tickers || []).filter((ticker) => typeof ticker === "string" && ticker))];
@@ -178,6 +178,9 @@ export function renderDailyManifest(payload) {
   state.activeDailyTradeDate = payload.trade_date || dailyDateInput.value.trim();
   dailyStatusDate.textContent = state.activeDailyTradeDate;
   renderDailySummary(payload.summary || null);
+  const watchlistScreening = state.dailyWatchlistPayload?.metadata?.screening || {};
+  const screeningEnabled = Boolean(payload.screening?.enabled || watchlistScreening.enabled);
+  const watchlistCompliance = screeningByTicker(watchlistScreening);
 
   const tickers = payload.tickers || [];
   if (!tickers.length) {
@@ -203,10 +206,12 @@ export function renderDailyManifest(payload) {
       <tbody>
         ${tickers
           .map(
-            (entry) => `
-              <tr class="${entry.shariah_compliance?.allowed === false ? "daily-row-blocked" : ""}">
+            (entry) => {
+              const compliance = entry.shariah_compliance || watchlistCompliance[entry.ticker] || null;
+              return `
+              <tr class="${screeningEnabled && compliance?.allowed === false ? "daily-row-blocked" : ""}">
                 <td><strong>${escapeHtml(entry.ticker)}</strong></td>
-                <td>${renderComplianceBadge(entry.shariah_compliance || null)}</td>
+                <td>${renderComplianceBadge(screeningEnabled ? compliance : null)}</td>
                 <td><span class="${statusClass(entry.status)}">${escapeHtml(entry.status)}</span></td>
                 <td>${escapeHtml(entry.rating || "n/a")}</td>
                 <td>${entry.report_path ? `<code>${escapeHtml(entry.report_path)}</code>` : "n/a"}</td>
@@ -221,7 +226,8 @@ export function renderDailyManifest(payload) {
                   }
                 </td>
               </tr>
-            `
+            `;
+            }
           )
           .join("")}
       </tbody>

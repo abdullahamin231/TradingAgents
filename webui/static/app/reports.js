@@ -1,6 +1,6 @@
-import { reportFileList, reportMeta, reportSelect, reportTitle, reportView, tickerSelect, tickerSummary } from "./dom.js?v=portfolio-tab-5";
-import { state } from "./state.js?v=portfolio-tab-5";
-import { escapeHtml } from "./utils.js?v=portfolio-tab-5";
+import { reportFileList, reportMeta, reportSelect, reportTitle, reportView, tickerSelect, tickerSummary } from "./dom.js?v=settings-tab-1";
+import { state } from "./state.js?v=settings-tab-1";
+import { escapeHtml } from "./utils.js?v=settings-tab-1";
 
 export function resetReportViewer() {
   state.activeReportPayload = null;

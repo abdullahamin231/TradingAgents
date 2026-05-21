@@ -18,16 +18,17 @@ import {
   reportSelect,
   tabButtons,
   tickerSelect,
-} from "./dom.js?v=portfolio-tab-5";
-import { loadDailyManifest, loadDailyWatchlist, prepareDailyRun, rerunHalalCheck, rescrapeDailyWatchlist, retryDailyTicker, runMissingDaily } from "./daily.js?v=portfolio-tab-5";
-import { fetchJobs } from "./jobs.js?v=portfolio-tab-5";
-import { submitOnDemandRun } from "./on-demand.js?v=portfolio-tab-5";
-import { bindPortfolioActions, loadCurrentPortfolio } from "./portfolio.js?v=portfolio-tab-5";
-import { loadProviders, updateModelDefault } from "./providers.js?v=portfolio-tab-5";
-import { loadReport, loadReportsForTicker, loadTickers, renderReportDocument } from "./reports.js?v=portfolio-tab-5";
-import { state } from "./state.js?v=portfolio-tab-5";
-import { loadTokenUsage } from "./token-usage.js?v=portfolio-tab-5";
-import { setMessage, setTab } from "./utils.js?v=portfolio-tab-5";
+} from "./dom.js?v=settings-tab-1";
+import { loadDailyManifest, loadDailyWatchlist, prepareDailyRun, rerunHalalCheck, rescrapeDailyWatchlist, retryDailyTicker, runMissingDaily } from "./daily.js?v=settings-tab-1";
+import { fetchJobs } from "./jobs.js?v=settings-tab-1";
+import { submitOnDemandRun } from "./on-demand.js?v=settings-tab-1";
+import { bindPortfolioActions, loadCurrentPortfolio } from "./portfolio.js?v=settings-tab-1";
+import { loadProviders, updateModelDefault } from "./providers.js?v=settings-tab-1";
+import { loadReport, loadReportsForTicker, loadTickers, renderReportDocument } from "./reports.js?v=settings-tab-1";
+import { bindSettingsActions, loadSettings } from "./settings.js?v=settings-tab-1";
+import { state } from "./state.js?v=settings-tab-1";
+import { loadTokenUsage } from "./token-usage.js?v=settings-tab-1";
+import { setMessage, setTab } from "./utils.js?v=settings-tab-1";
 
 function registerEventHandlers() {
   tabButtons.forEach((button) => {
@@ -60,6 +61,7 @@ function registerEventHandlers() {
 
   portfolioTradeDateInput.addEventListener("input", () => setMessage(portfolioMessage, ""));
   bindPortfolioActions();
+  bindSettingsActions();
 
   tickerSelect.addEventListener("change", (event) => loadReportsForTicker(event.target.value));
   reportSelect.addEventListener("change", () => loadReport(tickerSelect.value, reportSelect.value));
@@ -89,5 +91,6 @@ export function initApp() {
   loadCurrentPortfolio({ quiet: true });
   loadTickers();
   loadTokenUsage();
+  loadSettings();
   startPolling();
 }

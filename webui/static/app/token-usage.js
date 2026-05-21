@@ -1,5 +1,5 @@
-import { tokenUsageCharts, tokenUsageRuns, tokenUsageSummary } from "./dom.js?v=portfolio-tab-5";
-import { escapeHtml, formatDateTime, formatDecimal, formatDuration, formatNumber, statusClass, usageMetrics } from "./utils.js?v=portfolio-tab-5";
+import { tokenUsageCharts, tokenUsageRuns, tokenUsageSummary } from "./dom.js?v=settings-tab-1";
+import { escapeHtml, formatDateTime, formatDecimal, formatDuration, formatNumber, statusClass, usageMetrics } from "./utils.js?v=settings-tab-1";
 
 function buildUsageSeries(events, metricKey) {
   let runningTotal = 0;

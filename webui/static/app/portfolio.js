@@ -19,9 +19,9 @@ import {
   portfolioTargetHoldings,
   portfolioTargetSummary,
   portfolioTradeDateInput,
-} from "./dom.js?v=portfolio-tab-5";
-import { state } from "./state.js?v=portfolio-tab-5";
-import { escapeHtml, formatCurrency, formatDateTime, formatPercent, isValidTradeDate, setMessage, statusClass } from "./utils.js?v=portfolio-tab-5";
+} from "./dom.js?v=settings-tab-1";
+import { state } from "./state.js?v=settings-tab-1";
+import { escapeHtml, formatCurrency, formatDateTime, formatPercent, isValidTradeDate, setMessage, statusClass } from "./utils.js?v=settings-tab-1";
 
 const FIXED_MAX_POSITIONS = 10;
 

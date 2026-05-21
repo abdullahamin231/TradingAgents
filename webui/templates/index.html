@@ -17,6 +17,7 @@
             <button class="tab-button" type="button" data-tab-target="portfolio-rebalance">Portfolio</button>
             <button class="tab-button" type="button" data-tab-target="saved-reports">Saved Reports</button>
             <button class="tab-button" type="button" data-tab-target="token-usage">Token Usage</button>
+            <button class="tab-button" type="button" data-tab-target="settings">Settings</button>
           </div>
         </section>
 
@@ -341,12 +342,50 @@
             </section>
           </div>
         </section>
+
+        <section id="settings" class="tab-panel">
+          <div class="workspace">
+            <section class="control-pane">
+              <div class="pane-header">
+                <h1>Settings</h1>
+                <p>Configure daily automation and halal screening behavior.</p>
+              </div>
+
+              <div class="field-grid">
+                <label class="field field-checkbox">
+                  <span class="field-label">Halal checker</span>
+                  <span class="checkbox-row">
+                    <input id="settings-halal-checker-enabled" type="checkbox" />
+                    <span>Check Shariah compliance before daily coverage runs</span>
+                  </span>
+                </label>
+                <label class="field">
+                  <span class="field-label">Daily run time (New York)</span>
+                  <input id="settings-daily-run-time" type="time" value="09:30" />
+                </label>
+              </div>
+
+              <div class="action-row">
+                <button id="settings-save" type="button">Save settings</button>
+              </div>
+              <p id="settings-message" class="message" aria-live="polite"></p>
+            </section>
+
+            <section class="viewer-pane">
+              <div class="pane-header">
+                <h2>Automation</h2>
+                <p>Daily coverage runs once per New York calendar day at the configured time.</p>
+              </div>
+              <div id="settings-summary" class="portfolio-banner empty-state">Loading settings...</div>
+            </section>
+          </div>
+        </section>
       </section>
     </main>
 
     <script>
       window.TRADINGAGENTS_DEFAULT_DATE = "{{ today }}";
     </script>
-    <script type="module" src="/static/app.js?v=portfolio-tab-5"></script>
+    <script type="module" src="/static/app.js?v=settings-tab-1"></script>
   </body>
 </html>
