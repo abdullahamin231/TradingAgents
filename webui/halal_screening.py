@@ -13,6 +13,8 @@ from tradingagents.dataflows.utils import safe_ticker_component
 HALALSCREENER_API_KEY_ENV = "HALALSCREENER_API_KEY"
 
 DEFAULT_HALALSCREENER_URL_TEMPLATE = "https://halalscreener.app/api/v1/screen?symbol={ticker}"
+HALALSCREENER_REQUESTS_PER_MINUTE = 10
+HALALSCREENER_RATE_LIMIT_SLEEP_SECONDS = 60.0
 
 _ALLOW_STATUSES = {
     "compliant",
@@ -117,7 +119,9 @@ def screen_tickers(tickers: tuple[str, ...]) -> dict[str, Any]:
     kept: list[str] = []
     excluded: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
-    for ticker in normalized:
+    for index, ticker in enumerate(normalized):
+        if index and index % HALALSCREENER_REQUESTS_PER_MINUTE == 0:
+            time.sleep(HALALSCREENER_RATE_LIMIT_SLEEP_SECONDS)
         result = _screen_ticker(session, config, ticker)
         payload = result.to_payload()
         results.append(payload)

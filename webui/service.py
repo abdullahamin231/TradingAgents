@@ -476,7 +476,7 @@ def get_daily_run(trade_date: str) -> dict[str, Any]:
 
 
 def rerun_daily_halal_check(trade_date: str) -> dict[str, Any]:
-    watchlist = _resolve_screened_daily_watchlist()
+    watchlist = _resolve_daily_watchlist()
     coverage_tickers = _daily_coverage_tickers(tuple(watchlist["tickers"]))
     screening = _screen_daily_tickers(coverage_tickers)
     manifest = _load_daily_manifest(trade_date)
