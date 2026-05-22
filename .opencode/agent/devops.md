@@ -60,8 +60,6 @@ Operational files:
 - `docker-compose.yml`: WebUI, watchtower updater, CLI, Ollama profile.
 - `opencode.json`: default OpenCode model selection for WebUI provider defaults.
 - `webui/README.md`: WebUI runbook and endpoint list.
-- `.githooks/pre-push`: bumps/stages the WebUI ES module cache key before push if stale, then blocks the push so the cache-key change can be committed.
-- `scripts/bump_webui_cache_key.py`: deterministic WebUI cache-key updater used by the pre-push hook.
 - `scripts/bootstrap_seeking_alpha_auth.py`: manual browser bootstrap for Seeking Alpha cookies.
 - `scripts/smoke_structured_output.py`: structured output smoke helper.
 
@@ -265,15 +263,7 @@ Trace:
 4. Feature module such as `daily.js`, `settings.js`, `portfolio.js`, `reports.js`, `on-demand.js`, or `providers.js`.
 5. Matching FastAPI endpoint in `webui/app.py`.
 
-Fix the contract mismatch, not just the visible symptom. If the DOM element is required, keep it present in `index.html`; do not hide missing required buttons behind null-safe event binding unless the page variant intentionally omits that feature.
-
-Frontend ES module cache keys:
-
-- The WebUI uses native ES modules with query-string cache keys such as `?v=webui-da5db95f0ffd`.
-- Keep the same key across `webui/templates/index.html`, `webui/static/app.js`, and every import in `webui/static/app/*.js`.
-- Use `python3 scripts/bump_webui_cache_key.py` to refresh the key manually.
-- This checkout should use `git config core.hooksPath .githooks`; `.githooks/pre-push` runs `scripts/bump_webui_cache_key.py --stage --fail-on-change`.
-- If the pre-push hook updates files, it intentionally blocks the push. Commit the staged cache-key update, then push again.
+Fix the contract mismatch, not just the visible symptom. Keep module import cache-busting query strings consistent if existing imports use them.
 
 Verify with the endpoint and a browser smoke test when possible.
 
