@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+set +e
+python3 scripts/bump_webui_cache_key.py --stage --fail-on-change >/dev/null
+status=$?
+set -e
+
+if [[ "$status" -eq 2 ]]; then
+  cat >&2 <<'MSG'
+Web UI module cache key was updated and staged.
+Commit the staged cache-key change, then push again.
+MSG
+  exit 1
+fi
+
+exit "$status"
