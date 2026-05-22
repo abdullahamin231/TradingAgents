@@ -13,11 +13,11 @@ import {
   dailyWatchlistDiff,
   dailyWatchlistHoldings,
   dailyWatchlistMeta,
-} from "./dom.js?v=settings-tab-1";
-import { fetchJobs } from "./jobs.js?v=settings-tab-1";
-import { providerPayload } from "./providers.js?v=settings-tab-1";
-import { state } from "./state.js?v=settings-tab-1";
-import { escapeHtml, isValidTradeDate, setMessage, statusClass } from "./utils.js?v=settings-tab-1";
+} from "./dom.js?v=settings-tab-2";
+import { fetchJobs } from "./jobs.js?v=settings-tab-2";
+import { providerPayload } from "./providers.js?v=settings-tab-2";
+import { state } from "./state.js?v=settings-tab-2";
+import { escapeHtml, isValidTradeDate, setMessage, statusClass } from "./utils.js?v=settings-tab-2";
 
 function uniqueTickers(tickers) {
   return [...new Set((tickers || []).filter((ticker) => typeof ticker === "string" && ticker))];

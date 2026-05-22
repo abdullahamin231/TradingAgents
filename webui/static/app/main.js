@@ -17,17 +17,17 @@ import {
   reportSelect,
   tabButtons,
   tickerSelect,
-} from "./dom.js?v=settings-tab-1";
-import { loadDailyManifest, loadDailyWatchlist, prepareDailyRun, rescrapeDailyWatchlist, retryDailyTicker, runMissingDaily } from "./daily.js?v=settings-tab-1";
-import { fetchJobs } from "./jobs.js?v=settings-tab-1";
-import { submitOnDemandRun } from "./on-demand.js?v=settings-tab-1";
-import { bindPortfolioActions, loadCurrentPortfolio } from "./portfolio.js?v=settings-tab-1";
-import { loadProviders, updateModelDefault } from "./providers.js?v=settings-tab-1";
-import { loadReport, loadReportsForTicker, loadTickers, renderReportDocument } from "./reports.js?v=settings-tab-1";
-import { bindSettingsActions, loadHalalScreeningStatus, loadSettings } from "./settings.js?v=settings-tab-1";
-import { state } from "./state.js?v=settings-tab-1";
-import { loadTokenUsage } from "./token-usage.js?v=settings-tab-1";
-import { setMessage, setTab } from "./utils.js?v=settings-tab-1";
+} from "./dom.js?v=settings-tab-2";
+import { loadDailyManifest, loadDailyWatchlist, prepareDailyRun, rescrapeDailyWatchlist, retryDailyTicker, runMissingDaily } from "./daily.js?v=settings-tab-2";
+import { fetchJobs } from "./jobs.js?v=settings-tab-2";
+import { submitOnDemandRun } from "./on-demand.js?v=settings-tab-2";
+import { bindPortfolioActions, loadCurrentPortfolio } from "./portfolio.js?v=settings-tab-2";
+import { loadProviders, updateModelDefault } from "./providers.js?v=settings-tab-2";
+import { loadReport, loadReportsForTicker, loadTickers, renderReportDocument } from "./reports.js?v=settings-tab-2";
+import { bindSettingsActions, loadHalalScreeningStatus, loadSettings } from "./settings.js?v=settings-tab-2";
+import { state } from "./state.js?v=settings-tab-2";
+import { loadTokenUsage } from "./token-usage.js?v=settings-tab-2";
+import { setMessage, setTab } from "./utils.js?v=settings-tab-2";
 
 function registerEventHandlers() {
   tabButtons.forEach((button) => {

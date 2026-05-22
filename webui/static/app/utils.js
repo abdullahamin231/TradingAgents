@@ -1,4 +1,4 @@
-import { tabButtons, tabPanels } from "./dom.js?v=settings-tab-1";
+import { tabButtons, tabPanels } from "./dom.js?v=settings-tab-2";
 
 export const usageMetrics = [
   ["tokens_total", "Total Tokens"],

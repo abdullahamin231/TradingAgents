@@ -1,5 +1,5 @@
-import { providerGroups } from "./dom.js?v=settings-tab-1";
-import { state } from "./state.js?v=settings-tab-1";
+import { providerGroups } from "./dom.js?v=settings-tab-2";
+import { state } from "./state.js?v=settings-tab-2";
 
 export function updateModelDefault(groupName, providerValue) {
   const group = providerGroups[groupName];

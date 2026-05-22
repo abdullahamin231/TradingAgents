@@ -7,10 +7,10 @@ import {
   settingsRunHalalForcedButton,
   settingsSaveButton,
   settingsSummary,
-} from "./dom.js?v=settings-tab-1";
-import { loadDailyManifest, loadDailyWatchlist } from "./daily.js?v=settings-tab-1";
-import { state } from "./state.js?v=settings-tab-1";
-import { escapeHtml, setMessage } from "./utils.js?v=settings-tab-1";
+} from "./dom.js?v=settings-tab-2";
+import { loadDailyManifest, loadDailyWatchlist } from "./daily.js?v=settings-tab-2";
+import { state } from "./state.js?v=settings-tab-2";
+import { escapeHtml, setMessage } from "./utils.js?v=settings-tab-2";
 
 let halalStatusPoll = null;
 
