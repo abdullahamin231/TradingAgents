@@ -1,4 +1,57 @@
 services:
+  webui:
+    build: .
+    container_name: tradingagents-webui
+    entrypoint: []
+    command: ["uvicorn", "webui.app:app", "--host", "0.0.0.0", "--port", "2026"]
+    env_file:
+      - .env
+    volumes:
+      - .:/home/appuser/app
+      - tradingagents_data:/home/appuser/app/.tradingagents
+    ports:
+      - "2026:2026"
+    restart: unless-stopped
+
+  webui-watchtower:
+    image: docker:27-cli
+    container_name: tradingagents-webui-watchtower
+    working_dir: /workspace
+    environment:
+      WATCH_BRANCH: main
+      WATCH_INTERVAL_SECONDS: 60 * 15 # 15 minutes
+      WEBUI_CONTAINER: tradingagents-webui
+    volumes:
+      - .:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:
+      - /bin/sh
+      - -c
+      - |
+        apk add --no-cache git
+        git config --global --add safe.directory /workspace
+
+        while true; do
+          current_branch="$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+
+          if [ "$$current_branch" = "$$WATCH_BRANCH" ]; then
+            git fetch origin "$$WATCH_BRANCH"
+            local_commit="$$(git rev-parse HEAD)"
+            remote_commit="$$(git rev-parse "origin/$$WATCH_BRANCH")"
+
+            if [ "$$local_commit" != "$$remote_commit" ]; then
+              git pull --ff-only origin "$$WATCH_BRANCH" && docker restart "$$WEBUI_CONTAINER"
+            fi
+          else
+            echo "Skipping update: checked out branch is $$current_branch, expected $$WATCH_BRANCH"
+          fi
+
+          sleep "$$WATCH_INTERVAL_SECONDS"
+        done
+    depends_on:
+      - webui
+    restart: unless-stopped
+
   tradingagents:
     build: .
     env_file:
