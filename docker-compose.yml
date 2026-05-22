@@ -6,8 +6,10 @@ services:
     command: ["uvicorn", "webui.app:app", "--host", "0.0.0.0", "--port", "2026"]
     env_file:
       - .env
+    environment:
+      SEEKING_ALPHA_COOKIES_PATH: /home/appuser/app/seeking_alpha_cookies.json
     volumes:
-      - .:/home/appuser/app
+      - /root/TradingAgents:/home/appuser/app
       - tradingagents_data:/home/appuser/app/.tradingagents
     ports:
       - "2026:2026"
@@ -22,7 +24,7 @@ services:
       WATCH_INTERVAL_SECONDS: 60 * 15 # 15 minutes
       WEBUI_CONTAINER: tradingagents-webui
     volumes:
-      - .:/workspace
+      - /root/TradingAgents:/workspace
       - /var/run/docker.sock:/var/run/docker.sock
     command:
       - /bin/sh
