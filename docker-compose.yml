@@ -2,6 +2,7 @@ services:
   webui:
     build: .
     container_name: tradingagents-webui
+    user: root
     entrypoint: []
     command: ["uvicorn", "webui.app:app", "--host", "0.0.0.0", "--port", "2026"]
     env_file:
