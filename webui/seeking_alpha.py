@@ -25,7 +25,6 @@ SEEKING_ALPHA_SCREENER_API_URL = "https://seekingalpha.com/api/v3/screener_resul
 SEEKING_ALPHA_TOP_COUNT = 20
 SEEKING_ALPHA_CACHE_TTL_HOURS = 6
 SEEKING_ALPHA_COOKIES_ENV = "SEEKING_ALPHA_COOKIES_PATH"
-SEEKING_ALPHA_STORAGE_STATE_ENV = "SEEKING_ALPHA_STORAGE_STATE_PATH"
 SEEKING_ALPHA_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 SEEKING_ALPHA_SCREENER_PAYLOAD = {
     "filter": {
@@ -93,13 +92,6 @@ def _local_artifact_timestamp() -> str:
 
 def _cache_file(cache_dir: Path) -> Path:
     return cache_dir / "seeking_alpha_top_tickers.json"
-
-
-def resolve_storage_state_path(storage_state_path: str | Path | None = None) -> Path | None:
-    candidate = storage_state_path or os.getenv(SEEKING_ALPHA_STORAGE_STATE_ENV, "").strip()
-    if not candidate:
-        return None
-    return Path(candidate).expanduser().resolve()
 
 
 def resolve_cookies_path(cookies_path: str | Path | None = None) -> Path | None:
@@ -170,24 +162,6 @@ def _sanitize_tickers(symbols: Any, limit: int) -> list[str]:
     return sanitized
 
 
-def _load_storage_state_cookies(storage_state_path: Path) -> dict[str, str]:
-    payload = json.loads(storage_state_path.read_text(encoding="utf-8"))
-    cookies = payload.get("cookies")
-    if not isinstance(cookies, list):
-        raise RuntimeError(f"Invalid Playwright storage state file: {storage_state_path}")
-    resolved: dict[str, str] = {}
-    for cookie in cookies:
-        if not isinstance(cookie, dict):
-            continue
-        name = cookie.get("name")
-        value = cookie.get("value")
-        if isinstance(name, str) and isinstance(value, str) and name:
-            resolved[name] = value
-    if not resolved:
-        raise RuntimeError(f"No cookies found in Playwright storage state file: {storage_state_path}")
-    return resolved
-
-
 def _load_cookie_secret(cookies_path: Path) -> dict[str, str]:
     payload = json.loads(cookies_path.read_text(encoding="utf-8"))
     cookies = payload.get("cookies")
@@ -199,23 +173,14 @@ def _load_cookie_secret(cookies_path: Path) -> dict[str, str]:
     return resolved
 
 
-def _resolve_runtime_cookies(
-    cookies_path: str | Path | None = None,
-    storage_state_path: str | Path | None = None,
-) -> tuple[dict[str, str], str]:
+def _resolve_runtime_cookies(cookies_path: str | Path | None = None) -> tuple[dict[str, str], str]:
     resolved_cookies_path = resolve_cookies_path(cookies_path)
-    if resolved_cookies_path is not None:
-        if not resolved_cookies_path.exists():
-            raise RuntimeError(f"Seeking Alpha cookies file is missing: {resolved_cookies_path}")
-        return _load_cookie_secret(resolved_cookies_path), str(resolved_cookies_path)
+    if resolved_cookies_path is None:
+        raise RuntimeError(f"{SEEKING_ALPHA_COOKIES_ENV} must be configured")
 
-    resolved_storage_state_path = resolve_storage_state_path(storage_state_path)
-    if resolved_storage_state_path is not None:
-        if not resolved_storage_state_path.exists():
-            raise RuntimeError(f"Seeking Alpha storage state file is missing: {resolved_storage_state_path}")
-        return _load_storage_state_cookies(resolved_storage_state_path), str(resolved_storage_state_path)
-
-    raise RuntimeError(f"{SEEKING_ALPHA_COOKIES_ENV} or {SEEKING_ALPHA_STORAGE_STATE_ENV} must be configured")
+    if not resolved_cookies_path.exists():
+        raise RuntimeError(f"Seeking Alpha cookies file is missing: {resolved_cookies_path}")
+    return _load_cookie_secret(resolved_cookies_path), str(resolved_cookies_path)
 
 
 def _build_screener_session(cookies: dict[str, str]) -> requests.Session:
@@ -336,16 +301,13 @@ def _looks_like_login_or_bot_gate(page: Any) -> bool:
     return "prove you are not a robot" in content or "enable javascript and cookies" in content
 
 
-def build_browser_context_kwargs(storage_state_path: Path | None) -> dict[str, Any]:
-    kwargs: dict[str, Any] = {
+def build_browser_context_kwargs() -> dict[str, Any]:
+    return {
         "user_agent": SEEKING_ALPHA_USER_AGENT,
         "viewport": {"width": 1440, "height": 2200},
         "locale": "en-US",
         "timezone_id": "America/New_York",
     }
-    if storage_state_path is not None:
-        kwargs["storage_state"] = str(storage_state_path)
-    return kwargs
 
 
 def apply_stealth_init_script(context: Any) -> None:
@@ -396,7 +358,6 @@ def fetch_seeking_alpha_watchlist(
     cache_dir: Path,
     default_tickers: tuple[str, ...],
     cookies_path: str | Path | None = None,
-    storage_state_path: str | Path | None = None,
     force_refresh: bool = False,
     ttl_hours: int = SEEKING_ALPHA_CACHE_TTL_HOURS,
     limit: int = SEEKING_ALPHA_TOP_COUNT,
@@ -407,10 +368,7 @@ def fetch_seeking_alpha_watchlist(
         return cached
 
     try:
-        runtime_cookies, auth_source_path = _resolve_runtime_cookies(
-            cookies_path=cookies_path,
-            storage_state_path=storage_state_path,
-        )
+        runtime_cookies, auth_source_path = _resolve_runtime_cookies(cookies_path=cookies_path)
     except RuntimeError as exc:
         return _failed_refresh_fallback(
             cache_dir=cache_dir,

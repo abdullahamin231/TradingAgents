@@ -42,7 +42,7 @@ def main() -> int:
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=False, slow_mo=150)
-        context = browser.new_context(**build_browser_context_kwargs(None))
+        context = browser.new_context(**build_browser_context_kwargs())
         apply_stealth_init_script(context)
         page = context.new_page()
         page.goto(SEEKING_ALPHA_LOGIN_URL, wait_until="domcontentloaded", timeout=60000)

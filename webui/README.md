@@ -59,7 +59,7 @@ The Daily Coverage watchlist is fetched from Seeking Alpha screen:
 
 Current implementation:
 
-- prefers direct API extraction from Seeking Alpha using cookies from a Playwright `storageState` file
+- prefers direct API extraction from Seeking Alpha using a cookie secret file
 - reuses the most recent cached watchlist if a refresh fails, and falls back to the static `DEFAULT_DAILY_TICKERS` list only when no usable cache exists
 - stores preserved watchlist/debug artifacts under `webui_artifacts/seeking_alpha_watchlist/`
 
@@ -90,19 +90,19 @@ Notes:
 - the Settings tab can disable halal screening completely
 - if HalalScreener is not configured, the WebUI falls back to the unfiltered list
 
-Set the auth state path before running WebUI:
+Set the cookie secret path before running WebUI:
 
 ```bash
-export SEEKING_ALPHA_STORAGE_STATE_PATH=/absolute/path/to/seeking_alpha_state.json
+export SEEKING_ALPHA_COOKIES_PATH=/absolute/path/to/seeking_alpha_cookies.json
 ```
 
 Bootstrap that file once with:
 
 ```bash
-python scripts/bootstrap_seeking_alpha_auth.py --output /absolute/path/to/seeking_alpha_state.json
+python scripts/bootstrap_seeking_alpha_auth.py --output /absolute/path/to/seeking_alpha_cookies.json
 ```
 
-That helper opens a real browser, lets you log in manually, and writes a reusable Playwright `storageState` file for server-side watchlist refreshes.
+That helper opens a real browser, lets you log in manually, and writes a reusable cookie secret file for server-side watchlist refreshes.
 
 ## Main API Endpoints
 
