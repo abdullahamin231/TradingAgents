@@ -1,7 +1,7 @@
 {
   "daily_run_time": "09:30",
   "daily_run_timezone": "America/New_York",
-  "halal_checker_enabled": true,
+  "halal_checker_enabled": false,
   "last_scheduled_daily_run_date": "2026-05-22",
-  "updated_at": "2026-05-22T19:58:49.861235Z"
+  "updated_at": "2026-05-22T20:25:38.340151Z"
 }

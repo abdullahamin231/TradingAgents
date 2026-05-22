@@ -3,7 +3,7 @@
   "results": {
     "AMD": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:34:03.866238Z",
+      "checked_at": "2026-05-22T20:21:49.831593Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -12,7 +12,7 @@
     },
     "ASX": {
       "allowed": false,
-      "checked_at": "2026-05-21T18:35:07.057340Z",
+      "checked_at": "2026-05-22T20:22:50.926531Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "haram",
@@ -21,7 +21,7 @@
     },
     "AXTI": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:34:02.998334Z",
+      "checked_at": "2026-05-22T20:21:49.345671Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -30,7 +30,7 @@
     },
     "BAC": {
       "allowed": false,
-      "checked_at": "2026-05-21T18:35:10.335454Z",
+      "checked_at": "2026-05-22T20:22:51.978636Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "haram",
@@ -39,7 +39,7 @@
     },
     "CNC": {
       "allowed": false,
-      "checked_at": "2026-05-21T18:36:13.002865Z",
+      "checked_at": "2026-05-22T20:23:53.105813Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "haram",
@@ -48,7 +48,7 @@
     },
     "COHU": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:35:09.720217Z",
+      "checked_at": "2026-05-22T20:22:51.763158Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -57,7 +57,7 @@
     },
     "CRDO": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:35:07.679676Z",
+      "checked_at": "2026-05-22T20:22:51.141466Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -66,7 +66,7 @@
     },
     "CVX": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:36:15.114651Z",
+      "checked_at": "2026-05-22T20:24:54.103534Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -75,7 +75,7 @@
     },
     "DGELL": {
       "allowed": false,
-      "checked_at": "2026-05-21T18:35:08.083123Z",
+      "checked_at": "2026-05-22T20:22:51.254599Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "not covered",
@@ -84,16 +84,25 @@
     },
     "FLEX": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:36:12.596725Z",
+      "checked_at": "2026-05-22T20:23:52.939821Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
       "status": "halal",
       "ticker": "FLEX"
     },
+    "HIMX": {
+      "allowed": false,
+      "checked_at": "2026-05-22T20:23:53.389735Z",
+      "error": null,
+      "provider": "halalscreener",
+      "raw_status": "doubtful",
+      "status": "doubtful",
+      "ticker": "HIMX"
+    },
     "ICHR": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:34:03.410442Z",
+      "checked_at": "2026-05-22T20:21:49.619773Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -102,7 +111,7 @@
     },
     "LITE": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:34:02.535946Z",
+      "checked_at": "2026-05-22T20:21:49.175226Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -111,7 +120,7 @@
     },
     "MU": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:34:01.168286Z",
+      "checked_at": "2026-05-22T20:21:48.280686Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -120,7 +129,7 @@
     },
     "MXL": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:34:02.043300Z",
+      "checked_at": "2026-05-22T20:21:48.603351Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -129,7 +138,7 @@
     },
     "NBIS": {
       "allowed": false,
-      "checked_at": "2026-05-21T18:36:11.593709Z",
+      "checked_at": "2026-05-22T20:23:52.213582Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "haram",
@@ -138,7 +147,7 @@
     },
     "NVTS": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:35:08.698785Z",
+      "checked_at": "2026-05-22T20:22:51.442862Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -147,7 +156,7 @@
     },
     "PACS": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:36:15.563725Z",
+      "checked_at": "2026-05-22T20:24:54.250873Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -156,7 +165,7 @@
     },
     "PBR": {
       "allowed": false,
-      "checked_at": "2026-05-21T18:35:05.729259Z",
+      "checked_at": "2026-05-22T20:22:50.423939Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "haram",
@@ -165,7 +174,7 @@
     },
     "PBR.A": {
       "allowed": false,
-      "checked_at": "2026-05-21T18:34:04.714503Z",
+      "checked_at": "2026-05-22T20:21:50.051446Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "not covered",
@@ -174,7 +183,7 @@
     },
     "PENG": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:36:14.016871Z",
+      "checked_at": "2026-05-22T20:23:53.545977Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -183,7 +192,7 @@
     },
     "POET": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:36:11.160413Z",
+      "checked_at": "2026-05-22T20:23:52.393489Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -192,7 +201,7 @@
     },
     "PUMP": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:36:14.643927Z",
+      "checked_at": "2026-05-22T20:23:53.912640Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -201,7 +210,7 @@
     },
     "SIMO": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:34:04.267391Z",
+      "checked_at": "2026-05-22T20:21:49.967802Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -210,7 +219,7 @@
     },
     "SNDK": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:34:01.608551Z",
+      "checked_at": "2026-05-22T20:21:48.407998Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -219,7 +228,7 @@
     },
     "SNEX": {
       "allowed": false,
-      "checked_at": "2026-05-21T18:35:06.545265Z",
+      "checked_at": "2026-05-22T20:22:50.719318Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "haram",
@@ -228,7 +237,7 @@
     },
     "TSM": {
       "allowed": false,
-      "checked_at": "2026-05-21T18:34:05.103333Z",
+      "checked_at": "2026-05-22T20:21:50.187050Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "haram",
@@ -237,7 +246,7 @@
     },
     "TTE": {
       "allowed": false,
-      "checked_at": "2026-05-21T18:35:09.307801Z",
+      "checked_at": "2026-05-22T20:22:51.603199Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "doubtful",
@@ -246,7 +255,7 @@
     },
     "TTMI": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:36:12.186186Z",
+      "checked_at": "2026-05-22T20:23:52.652960Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -255,16 +264,25 @@
     },
     "UCTT": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:35:06.135258Z",
+      "checked_at": "2026-05-22T20:22:50.545912Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
       "status": "halal",
       "ticker": "UCTT"
     },
+    "VSH": {
+      "allowed": true,
+      "checked_at": "2026-05-22T20:23:52.803463Z",
+      "error": null,
+      "provider": "halalscreener",
+      "raw_status": "halal",
+      "status": "halal",
+      "ticker": "VSH"
+    },
     "XOM": {
       "allowed": true,
-      "checked_at": "2026-05-21T18:36:13.618432Z",
+      "checked_at": "2026-05-22T20:23:53.725565Z",
       "error": null,
       "provider": "halalscreener",
       "raw_status": "halal",
@@ -272,5 +290,5 @@
       "ticker": "XOM"
     }
   },
-  "updated_at": "2026-05-21T18:36:15.563800Z"
+  "updated_at": "2026-05-22T20:24:54.250905Z"
 }
