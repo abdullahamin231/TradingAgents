@@ -2,6 +2,7 @@ import errno
 import json
 import os
 import select
+import shlex
 from pathlib import Path
 import pty
 import subprocess
@@ -16,6 +17,7 @@ from .base_client import BaseLLMClient
 
 
 _DEFAULT_OPENCODE_COMMAND = ("opencode", "run")
+_OPENCODE_COMMAND_ENV = "OPENCODE_COMMAND"
 
 
 @dataclass
@@ -67,6 +69,13 @@ def _validate_structured_output(schema: type, payload: str) -> Any:
     if hasattr(schema, "parse_raw"):
         return schema.parse_raw(payload)
     raise TypeError(f"Unsupported schema type: {schema!r}")
+
+
+def _opencode_command() -> list[str]:
+    configured = os.getenv(_OPENCODE_COMMAND_ENV, "").strip()
+    if configured:
+        return shlex.split(configured)
+    return [*_DEFAULT_OPENCODE_COMMAND]
 
 
 def _tool_schema(tool: Any) -> dict[str, Any]:
@@ -222,7 +231,7 @@ class OpenCodeClient(BaseLLMClient):
         return RunnableLambda(_invoke_structured)
 
     def _run_binary(self, prompt: str) -> OpenCodeRunResult:
-        command = [*_DEFAULT_OPENCODE_COMMAND]
+        command = _opencode_command()
         command.extend(["--format", "json"])
         if self.model:
             command.extend(["--model", self.model])

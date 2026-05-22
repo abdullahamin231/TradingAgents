@@ -7,6 +7,11 @@ services:
     env_file:
       - .env
     environment:
+      OPENCODE_COMMAND: /opt/opencode/bin/opencode run
+      XDG_CONFIG_HOME: /opt/opencode-config
+      XDG_STATE_HOME: /home/appuser/app/.tradingagents/opencode-state
+      XDG_DATA_HOME: /home/appuser/app/.tradingagents/opencode-data
+      XDG_CACHE_HOME: /home/appuser/app/.tradingagents/opencode-cache
       SEEKING_ALPHA_COOKIES_PATH: /home/appuser/app/seeking_alpha_cookies.json
     volumes:
       - /root/TradingAgents:/home/appuser/app
@@ -14,6 +19,8 @@ services:
       - /root/TradingAgents/webui_artifacts:/home/appuser/app/webui_artifacts
       - /root/TradingAgents/reports:/home/appuser/app/reports
       - /root/TradingAgents/.tradingagents:/home/appuser/app/.tradingagents
+      - /root/.opencode:/opt/opencode:ro
+      - /root/.config/opencode:/opt/opencode-config/opencode:ro
     ports:
       - "2026:2026"
     restart: unless-stopped
