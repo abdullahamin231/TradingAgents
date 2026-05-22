@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field
 from .service import (
     TradingJobManager,
     build_daily_rebalance_plan,
-    execute_daily_rebalance_plan,
     get_daily_run,
     get_settings,
     get_daily_watchlist,
@@ -90,11 +89,6 @@ class RebalancePlanRequest(BaseModel):
     total_equity: float | None = Field(default=None, gt=0.0)
     max_positions: int = Field(default=10, ge=1, le=50)
     apply_targets: bool = False
-
-
-class RebalanceExecutionRequest(BaseModel):
-    total_equity: float | None = Field(default=None, gt=0.0)
-    max_positions: int = Field(default=10, ge=1, le=50)
 
 
 def _is_weekday(value: date) -> bool:
@@ -334,20 +328,6 @@ def rebalance_plan(trade_date: str, payload: RebalancePlanRequest) -> dict:
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@app.post("/api/daily-runs/{trade_date}/rebalance-execution")
-def rebalance_execution(trade_date: str, payload: RebalanceExecutionRequest) -> dict:
-    try:
-        return execute_daily_rebalance_plan(
-            trade_date,
-            total_equity=payload.total_equity,
-            max_positions=payload.max_positions,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.get("/api/tickers")

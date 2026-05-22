@@ -75,6 +75,39 @@ def _normalize_tickers(values: list[str] | tuple[str, ...] | None) -> list[str]:
     return normalized
 
 
+def _manifest_screening_enabled(manifest: dict[str, Any]) -> bool:
+    return bool((manifest.get("screening") or {}).get("enabled"))
+
+
+def _manifest_blocked_tickers(manifest: dict[str, Any]) -> set[str]:
+    blocked: set[str] = set()
+    if not _manifest_screening_enabled(manifest):
+        return blocked
+    for entry in manifest.get("tickers", []):
+        if not isinstance(entry, dict) or not isinstance(entry.get("ticker"), str):
+            continue
+        compliance = entry.get("shariah_compliance") or {}
+        if compliance.get("allowed") is False and compliance.get("status") not in {"screening_error", "unknown"}:
+            blocked.add(entry["ticker"])
+    return blocked
+
+
+def _estimate_sell_qty(
+    *,
+    current_shares: Any,
+    current_notional: float,
+    sell_notional: float,
+    sell_all: bool = False,
+) -> float | None:
+    if not isinstance(current_shares, (int, float)) or current_shares <= 0:
+        return None
+    if sell_all:
+        return round(float(current_shares), 6)
+    if current_notional <= 0:
+        return None
+    return round(min(float(current_shares), float(current_shares) * sell_notional / current_notional), 6)
+
+
 def default_portfolio_state(total_equity: float = DEFAULT_PORTFOLIO_TOTAL_EQUITY) -> dict[str, Any]:
     total = _round_money(total_equity)
     return {
@@ -187,12 +220,13 @@ def build_rebalance_plan(
         for entry in manifest.get("tickers", [])
         if isinstance(entry, dict) and entry.get("status") == "completed" and isinstance(entry.get("ticker"), str)
     }
+    blocked_tickers = _manifest_blocked_tickers(manifest)
 
     required_universe = _normalize_tickers([*normalized_watchlist, *existing_holdings])
     pending_analysis = [
         ticker
         for ticker in required_universe
-        if completed_entries.get(ticker) is None
+        if ticker not in blocked_tickers and completed_entries.get(ticker) is None
     ]
 
     ranked_candidates: list[dict[str, Any]] = []
@@ -214,6 +248,7 @@ def build_rebalance_plan(
                 "current_weight": float(current_positions.get(ticker, {}).get("current_weight", 0.0) or 0.0),
                 "current_notional": _round_money(float(current_positions.get(ticker, {}).get("current_notional", 0.0) or 0.0)),
                 "target_multiplier": float(multipliers.get(rating, 0.0) or 0.0),
+                "shariah_blocked": ticker in blocked_tickers,
             }
         )
 
@@ -226,40 +261,73 @@ def build_rebalance_plan(
         )
     )
 
+    ranked_by_ticker = {item["ticker"]: item for item in ranked_candidates}
     selected = [
         item
         for item in ranked_candidates
-        if item["rating"] != "Sell"
+        if item["ticker"] in normalized_watchlist and item["rating"] != "Sell" and not item["shariah_blocked"]
     ][:max_positions]
     selected_tickers = {item["ticker"] for item in selected}
-    multiplier_total = sum(max(item["target_multiplier"], 0.0) for item in selected)
+    equal_target_notional = _round_money(total_value / max_positions) if max_positions > 0 else 0.0
 
     target_positions: list[dict[str, Any]] = []
-    for item in ranked_candidates:
-        if item["ticker"] not in selected_tickers or multiplier_total <= 0:
-            target_weight = 0.0
-        else:
-            target_weight = max(item["target_multiplier"], 0.0) / multiplier_total
-        target_notional = _round_money(total_value * target_weight)
+    for ticker in _normalize_tickers([*normalized_watchlist, *existing_holdings]):
+        item = ranked_by_ticker.get(ticker)
+        if item is None:
+            continue
         current_notional = item["current_notional"]
+        current_shares = current_positions.get(ticker, {}).get("shares")
+        action_reason = "not selected"
+        selected_for_target = ticker in selected_tickers
+        skipped = False
+        sell_all = False
+
+        if item["shariah_blocked"]:
+            target_notional = current_notional
+            action_reason = "blocked by halal screening"
+            skipped = True
+        elif item["is_existing_holding"]:
+            if item["rating"] == "Sell":
+                target_notional = 0.0
+                action_reason = "sell existing holding because analysis is Sell"
+                sell_all = True
+            elif item["rating"] == "Overweight":
+                target_notional = _round_money(current_notional * 0.9)
+                action_reason = "reduce existing exposure by 10% because analysis is Overweight"
+            elif item["rating"] == "Underweight":
+                target_notional = _round_money(current_notional * 1.1)
+                action_reason = "increase existing exposure by 10% because analysis is Underweight"
+            else:
+                target_notional = current_notional
+                action_reason = f"keep existing holding because analysis is {item['rating']}"
+        elif selected_for_target:
+            target_notional = equal_target_notional
+            action_reason = f"open top-{max_positions} selected name; non-held {item['rating']} is treated as Buy"
+        else:
+            target_notional = 0.0
+
+        target_weight = target_notional / total_value if total_value > 0 else 0.0
+        target_notional = _round_money(total_value * target_weight)
         delta_notional = _round_money(target_notional - current_notional)
-        side = "buy" if delta_notional > 0.01 else "sell" if delta_notional < -0.01 else "hold"
-        current_shares = item.get("shares")
+        side = "skip" if skipped else "buy" if delta_notional > 0.01 else "sell" if delta_notional < -0.01 else "hold"
         estimated_sell_qty = None
-        if side == "sell" and isinstance(current_shares, (int, float)) and current_shares > 0 and current_notional > 0:
-            estimated_sell_qty = round(
-                min(float(current_shares), float(current_shares) * abs(delta_notional) / current_notional),
-                6,
+        if side == "sell":
+            estimated_sell_qty = _estimate_sell_qty(
+                current_shares=current_shares,
+                current_notional=current_notional,
+                sell_notional=abs(delta_notional),
+                sell_all=sell_all,
             )
         target_positions.append(
             {
                 **item,
-                "selected_for_target_portfolio": item["ticker"] in selected_tickers,
+                "selected_for_target_portfolio": selected_for_target,
                 "target_weight": round(target_weight, 6),
                 "target_notional": target_notional,
                 "delta_notional": delta_notional,
                 "estimated_sell_qty": estimated_sell_qty,
                 "rebalance_action": side,
+                "action_reason": action_reason,
             }
         )
 
@@ -287,7 +355,7 @@ def build_rebalance_plan(
             },
         }
         for item in target_positions
-        if item["rebalance_action"] != "hold"
+        if item["rebalance_action"] in {"buy", "sell"}
     ]
 
     total_target_notional = _round_money(sum(item["target_notional"] for item in target_positions))
@@ -333,7 +401,7 @@ def build_rebalance_plan(
         "assumptions": {
             "ranking_order": ["Buy", "Overweight", "Hold", "Underweight", "Sell"],
             "rating_weight_multipliers": multipliers,
-            "execution_mode": "notional_only",
+            "execution_mode": "daily_top_10_with_existing_holding_rules",
             "broker_ready": True,
         },
         "generated_at": _utcnow(),

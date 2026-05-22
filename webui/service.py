@@ -275,11 +275,12 @@ def _resolve_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
 def _resolve_screened_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
     watchlist = _resolve_daily_watchlist(force_refresh=force_refresh)
     screening = _daily_screening_display_payload(tuple(watchlist.get("tickers", ())))
+    screened_tickers = screening.get("kept_tickers") if screening.get("enabled") else screening.get("tickers")
     return {
         **watchlist,
         "raw_tickers": list(watchlist.get("tickers", ())),
-        "tickers": screening["tickers"],
-        "eligible_tickers": list(watchlist.get("tickers", ())),
+        "tickers": list(screened_tickers or watchlist.get("tickers", ())),
+        "eligible_tickers": list(screened_tickers or watchlist.get("tickers", ())),
         "screening": screening,
     }
 
@@ -489,6 +490,7 @@ class TradingJobManager:
                 job.completed_at = datetime.utcnow().isoformat() + "Z"
             if job.workflow == WORKFLOW_DAILY_COVERAGE:
                 _update_daily_run_job_state(job.trade_date, job.ticker, status="completed", job_id=job.job_id, rating=parse_rating(decision), report_path=job.report_path, started_at=job.started_at, completed_at=job.completed_at, error=None)
+                finalize_daily_coverage_portfolio(job.trade_date)
         except Exception as exc:  # pragma: no cover - surfaced to API
             usage_summary = usage_collector.snapshot() if "usage_collector" in locals() and usage_collector is not None else None
             with self._lock:
@@ -500,6 +502,7 @@ class TradingJobManager:
                 job.completed_at = datetime.utcnow().isoformat() + "Z"
             if job.workflow == WORKFLOW_DAILY_COVERAGE:
                 _update_daily_run_job_state(job.trade_date, job.ticker, status="failed", job_id=job.job_id, started_at=job.started_at, completed_at=job.completed_at, error=str(exc))
+                finalize_daily_coverage_portfolio(job.trade_date)
 
 
 def list_report_tickers() -> list[dict[str, Any]]:
@@ -530,8 +533,8 @@ def get_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
     return service_daily.get_daily_watchlist(str(watchlist["source"]), tuple(watchlist["tickers"]), DAILY_COVERAGE_POLICY, metadata)
 
 
-def prepare_daily_run(trade_date: str) -> dict[str, Any]:
-    watchlist = _resolve_daily_watchlist()
+def prepare_daily_run(trade_date: str, *, force_refresh_watchlist: bool = False) -> dict[str, Any]:
+    watchlist = _resolve_daily_watchlist(force_refresh=force_refresh_watchlist)
     coverage_tickers = _daily_coverage_tickers(tuple(watchlist["tickers"]))
     screening = _screen_daily_tickers(coverage_tickers)
     return service_daily.prepare_daily_run(
@@ -681,9 +684,12 @@ def build_daily_rebalance_plan(
     total_equity: float | None = None,
     max_positions: int = service_portfolio.DEFAULT_TARGET_POSITION_COUNT,
     apply_targets: bool = False,
+    portfolio_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     manifest = get_daily_run(trade_date)
-    watchlist = _resolve_screened_daily_watchlist()
+    watchlist_tickers = tuple(manifest.get("watchlist_tickers") or ())
+    if not watchlist_tickers:
+        watchlist_tickers = tuple(_resolve_screened_daily_watchlist()["tickers"])
     previous_manifest = service_portfolio.latest_previous_manifest(
         trade_date,
         REPORTS_DIR / DAILY_RUNS_DIRNAME,
@@ -693,8 +699,8 @@ def build_daily_rebalance_plan(
     plan = service_portfolio.build_rebalance_plan(
         trade_date=trade_date,
         manifest=manifest,
-        portfolio_state=get_portfolio_state(),
-        watchlist_tickers=tuple(watchlist["tickers"]),
+        portfolio_state=portfolio_state or get_portfolio_state(),
+        watchlist_tickers=watchlist_tickers,
         previous_watchlist_tickers=previous_watchlist,
         total_equity=total_equity,
         max_positions=max_positions,
@@ -714,14 +720,30 @@ def execute_daily_rebalance_plan(
     total_equity: float | None = None,
     max_positions: int = service_portfolio.DEFAULT_TARGET_POSITION_COUNT,
 ) -> dict[str, Any]:
+    current_portfolio = sync_alpaca_paper_portfolio()
     plan = build_daily_rebalance_plan(
         trade_date,
-        total_equity=total_equity,
+        total_equity=total_equity or current_portfolio.get("total_equity"),
         max_positions=max_positions,
         apply_targets=False,
+        portfolio_state=current_portfolio,
     )
     if not plan["ready"]:
         raise ValueError("Daily rebalance plan is not ready because required analysis is still pending.")
+
+    if not plan.get("order_intents"):
+        result = {
+            "execution_id": f"{trade_date}-no-orders",
+            "trade_date": trade_date,
+            "broker": {"provider": "alpaca", "environment": "paper"},
+            "submitted_orders": [],
+            "submitted_order_count": 0,
+            "submitted_at": datetime.utcnow().isoformat() + "Z",
+            "plan": plan,
+            "status": "no_orders",
+        }
+        service_portfolio.write_execution_result(_portfolio_paths(), result)
+        return result
 
     execution = service_alpaca.submit_rebalance_orders(
         plan.get("order_intents", []),
@@ -731,6 +753,51 @@ def execute_daily_rebalance_plan(
     result = {**execution, "plan": plan}
     service_portfolio.write_execution_result(_portfolio_paths(), result)
     return result
+
+
+def _daily_manifest_has_open_work(manifest: dict[str, Any]) -> bool:
+    for entry in manifest.get("tickers", []):
+        compliance = entry.get("shariah_compliance") or {}
+        if service_daily.is_blocking_compliance(compliance):
+            continue
+        if entry.get("status") in {"pending", "queued", "running"}:
+            return True
+    return False
+
+
+def _set_daily_portfolio_execution(trade_date: str, payload: dict[str, Any]) -> None:
+    manifest = _load_daily_manifest(trade_date)
+    manifest["portfolio_execution"] = {
+        **payload,
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+    }
+    _write_daily_manifest(manifest)
+
+
+def finalize_daily_coverage_portfolio(trade_date: str) -> dict[str, Any]:
+    manifest = _load_daily_manifest(trade_date)
+    existing = manifest.get("portfolio_execution") if isinstance(manifest.get("portfolio_execution"), dict) else None
+    if existing and existing.get("status") in {"submitted", "no_orders", "running"}:
+        return existing
+    if _daily_manifest_has_open_work(manifest):
+        return {"status": "waiting", "detail": "Daily coverage is still running."}
+
+    _set_daily_portfolio_execution(trade_date, {"status": "running"})
+    try:
+        execution = execute_daily_rebalance_plan(trade_date)
+    except Exception as exc:
+        payload = {"status": "failed", "error": str(exc)}
+        _set_daily_portfolio_execution(trade_date, payload)
+        return payload
+
+    payload = {
+        "status": execution.get("status") or "submitted",
+        "execution_id": execution.get("execution_id"),
+        "submitted_order_count": execution.get("submitted_order_count", 0),
+        "submitted_at": execution.get("submitted_at"),
+    }
+    _set_daily_portfolio_execution(trade_date, payload)
+    return payload
 
 
 def queue_daily_run_entries(
@@ -743,7 +810,10 @@ def queue_daily_run_entries(
     tickers: list[str] | None = None,
     retry_failed_only: bool = False,
 ) -> dict[str, Any]:
-    return service_daily.queue_daily_run_entries(
+    def prepare_with_fresh_watchlist(run_date: str) -> dict[str, Any]:
+        return prepare_daily_run(run_date, force_refresh_watchlist=not retry_failed_only)
+
+    result = service_daily.queue_daily_run_entries(
         job_manager,
         trade_date,
         lock=_daily_manifest_lock,
@@ -755,9 +825,12 @@ def queue_daily_run_entries(
         retry_failed_only=retry_failed_only,
         manifest_loader=_load_daily_manifest,
         manifest_writer=_write_daily_manifest,
-        prepare_daily_run_fn=prepare_daily_run,
+        prepare_daily_run_fn=prepare_with_fresh_watchlist,
         get_daily_run_fn=get_daily_run,
     )
+    if not result.get("queued_jobs"):
+        result["portfolio_execution"] = finalize_daily_coverage_portfolio(trade_date)
+    return result
 
 
 def get_token_usage(job_manager: TradingJobManager) -> dict[str, Any]:

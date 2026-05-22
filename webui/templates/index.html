@@ -158,6 +158,7 @@
                 <p>Manifest for <span id="daily-status-date">{{ today }}</span>.</p>
               </div>
               <div id="daily-summary" class="summary-strip empty-state">Prepare a daily run to create the manifest.</div>
+              <div id="daily-portfolio-execution" class="portfolio-banner empty-state">Portfolio execution will appear after daily coverage completes.</div>
               <div id="daily-status-table" class="daily-table-shell empty-state">No manifest prepared yet.</div>
             </section>
           </div>
@@ -212,8 +213,8 @@
           <div class="workspace">
             <section class="control-pane">
               <div class="pane-header">
-                <h1>Portfolio rebalance</h1>
-                <p>1. Pull the live Alpaca paper book. 2. Review the current portfolio. 3. Generate the next 10-stock target allocation from daily coverage. 4. Submit paper orders only after review.</p>
+                <h1>Portfolio automation</h1>
+                <p>Daily coverage now drives execution: scrape Seeking Alpha, apply halal filtering, analyze the slate, sync Alpaca, then place the rule-based paper orders automatically.</p>
               </div>
 
               <div class="field-grid">
@@ -231,28 +232,15 @@
               </div>
 
               <div class="action-row">
-                <button id="portfolio-sync-broker" type="button">1. Pull Alpaca paper portfolio</button>
-                <button id="portfolio-load-current" type="button">Reload saved portfolio snapshot</button>
-                <button id="portfolio-save-current" type="button">Save edited portfolio snapshot</button>
-              </div>
-
-              <section class="stack-section">
-                <div class="section-head">
-                  <h2>Positions editor</h2>
-                  <p>Optional manual edits. One line per holding: <code>TICKER, NOTIONAL, WEIGHT, RATING</code>. Save only if you want to override the loaded snapshot.</p>
-                </div>
-                <textarea id="portfolio-positions-input" class="code-editor" spellcheck="false" rows="12" placeholder="AAPL, 25000, 0.25, Hold&#10;MSFT, 25000, 0.25, Underweight"></textarea>
-              </section>
-
-              <div class="action-row">
-                <button id="portfolio-generate-plan" type="button">2. Generate proposed allocation</button>
-                <button id="portfolio-execute-plan" type="button">3. Place Alpaca paper orders</button>
+                <button id="portfolio-sync-broker" type="button">Refresh Alpaca snapshot</button>
+                <button id="portfolio-load-current" type="button">Reload saved snapshot</button>
+                <button id="portfolio-generate-plan" type="button">Preview current plan</button>
               </div>
               <p id="portfolio-message" class="message" aria-live="polite"></p>
 
               <section class="stack-section">
                 <div class="section-head">
-                  <h2>Current snapshot</h2>
+                  <h2>Alpaca book</h2>
                   <p id="portfolio-current-meta">No portfolio loaded.</p>
                 </div>
                 <div id="portfolio-current-summary" class="summary-strip empty-state">Load the current portfolio to inspect the live paper book.</div>
@@ -262,11 +250,11 @@
 
             <section class="viewer-pane">
               <div class="pane-header">
-                <h2>Rebalance output</h2>
-                <p>Top-conviction target allocations and execution deltas for the selected trade date.</p>
+                <h2>Execution plan</h2>
+                <p>Rule outcomes from daily coverage and the latest Alpaca position sync.</p>
               </div>
 
-              <div id="portfolio-plan-meta" class="portfolio-banner empty-state">Generate a rebalance plan after the daily coverage run completes.</div>
+              <div id="portfolio-plan-meta" class="portfolio-banner empty-state">Daily coverage will generate and execute this plan automatically after analysis completes.</div>
               <div id="portfolio-plan-summary" class="summary-strip empty-state">No rebalance plan generated yet.</div>
 
               <section class="stack-section">
@@ -280,7 +268,7 @@
               <section class="stack-section">
                 <div class="section-head">
                   <h2>Ranking</h2>
-                  <p>All analyzed names, their ratings, and target allocation outcomes.</p>
+                  <p>Analyzed names, selected status, halal skips, and rule outcomes.</p>
                 </div>
                 <div id="portfolio-ranking-table" class="daily-table-shell empty-state">No ranking available yet.</div>
               </section>
@@ -288,7 +276,7 @@
               <section class="stack-section">
                 <div class="section-head">
                   <h2>Order intents</h2>
-                  <p>Paper-trading instructions derived from the proposed rebalance.</p>
+                  <p>Orders created by the automatic daily coverage finalization.</p>
                 </div>
                 <div id="portfolio-order-intents" class="daily-table-shell empty-state">No order intents yet.</div>
               </section>
@@ -296,19 +284,12 @@
               <section class="stack-section">
                 <div class="section-head">
                   <h2>Proposed allocation</h2>
-                  <p>The post-coverage target portfolio. This is a preview until paper orders are submitted.</p>
+                  <p>The expected post-rule portfolio if all generated paper orders are accepted.</p>
                 </div>
                 <div id="portfolio-target-summary" class="summary-strip empty-state">No proposed allocation yet.</div>
                 <div id="portfolio-target-holdings" class="daily-table-shell empty-state">No proposed positions yet.</div>
               </section>
 
-              <section class="stack-section">
-                <div class="section-head">
-                  <h2>Latest execution</h2>
-                  <p id="portfolio-execution-meta">No paper-trade submission yet.</p>
-                </div>
-                <div id="portfolio-execution-table" class="daily-table-shell empty-state">Submitted Alpaca paper orders will appear here.</div>
-              </section>
             </section>
           </div>
         </section>

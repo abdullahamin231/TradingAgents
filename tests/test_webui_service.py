@@ -100,6 +100,53 @@ def test_get_provider_default_model_uses_openai_defaults_when_opencode_config_mi
     assert service.get_provider_default_model("opencode", "deep") == "openai/gpt-5.4"
 
 
+def test_execute_daily_rebalance_plan_syncs_alpaca_before_orders(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "REPORTS_DIR", tmp_path / "reports")
+    monkeypatch.setattr(service.service_portfolio, "write_rebalance_plan", lambda paths, plan: plan)
+    monkeypatch.setattr(service.service_portfolio, "write_execution_result", lambda paths, execution: execution)
+    monkeypatch.setattr(service, "sync_alpaca_paper_portfolio", lambda: {
+        "as_of": "2026-05-23",
+        "total_equity": 100000.0,
+        "cash_notional": 90000.0,
+        "positions": [
+            {"ticker": "OLD", "shares": 10, "current_notional": 10000.0, "current_weight": 0.1},
+        ],
+    })
+    monkeypatch.setattr(service, "get_daily_run", lambda trade_date: {
+        "trade_date": trade_date,
+        "watchlist_tickers": ["NEW"],
+        "screening": {"enabled": False},
+        "tickers": [
+            {"ticker": "NEW", "status": "completed", "rating": "Buy", "report_path": "reports/NEW.md"},
+            {"ticker": "OLD", "status": "completed", "rating": "Sell", "report_path": "reports/OLD.md"},
+        ],
+    })
+
+    captured = {}
+
+    def submit_orders(order_intents, *, current_portfolio, trade_date):
+        captured["order_intents"] = order_intents
+        captured["current_portfolio"] = current_portfolio
+        return {
+            "execution_id": "exec-1",
+            "trade_date": trade_date,
+            "submitted_orders": [],
+            "submitted_order_count": len(order_intents),
+            "submitted_at": "2026-05-23T14:00:00Z",
+        }
+
+    monkeypatch.setattr(service.service_alpaca, "submit_rebalance_orders", submit_orders)
+
+    result = service.execute_daily_rebalance_plan("2026-05-23")
+
+    assert result["submitted_order_count"] == 2
+    assert captured["current_portfolio"]["positions"][0]["ticker"] == "OLD"
+    orders = {order["ticker"]: order for order in captured["order_intents"]}
+    assert orders["OLD"]["side"] == "sell"
+    assert orders["OLD"]["estimated_sell_qty"] == 10
+    assert orders["NEW"]["side"] == "buy"
+
+
 def test_list_llm_providers_includes_opencode_and_google():
     providers = service.list_llm_providers()
     values = {provider["value"] for provider in providers}
