@@ -97,14 +97,21 @@ class RebalanceExecutionRequest(BaseModel):
     max_positions: int = Field(default=10, ge=1, le=50)
 
 
+def _is_weekday(value: date) -> bool:
+    return value.weekday() < 5
+
+
 def _scheduler_loop() -> None:
     while not _scheduler_stop.wait(30):
         current_settings = get_settings()
         daily_run_time = str(current_settings.get("daily_run_time") or "09:30")
         now = datetime.now(ZoneInfo(str(current_settings.get("daily_run_timezone") or "America/New_York")))
         run_time = datetime.strptime(daily_run_time, "%H:%M").time()
-        run_date = now.date().isoformat()
+        run_day = now.date()
+        run_date = run_day.isoformat()
         if now.time() < run_time:
+            continue
+        if not _is_weekday(run_day):
             continue
         if current_settings.get("last_scheduled_daily_run_date") == run_date:
             continue
