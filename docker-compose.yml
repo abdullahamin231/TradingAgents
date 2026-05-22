@@ -10,7 +10,10 @@ services:
       SEEKING_ALPHA_COOKIES_PATH: /home/appuser/app/seeking_alpha_cookies.json
     volumes:
       - /root/TradingAgents:/home/appuser/app
-      - tradingagents_data:/home/appuser/app/.tradingagents
+      - /root/TradingAgents/seeking_alpha_cookies.json:/home/appuser/app/seeking_alpha_cookies.json
+      - /root/TradingAgents/webui_artifacts:/home/appuser/app/webui_artifacts
+      - /root/TradingAgents/reports:/home/appuser/app/reports
+      - /root/TradingAgents/.tradingagents:/home/appuser/app/.tradingagents
     ports:
       - "2026:2026"
     restart: unless-stopped
