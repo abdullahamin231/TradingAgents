@@ -64,7 +64,6 @@
 .field,
 .stack-section,
 .jobs-list,
-.policy-list,
 .summary-strip,
 .job-head,
 .job-line,
@@ -112,7 +111,6 @@
 }
 
 .jobs-list,
-.policy-list,
 .summary-strip {
   gap: 0.75rem;
 }

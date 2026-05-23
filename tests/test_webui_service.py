@@ -7,6 +7,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from webui import service
 
 
+def _stub_daily_watchlist(monkeypatch, tickers):
+    monkeypatch.setattr(
+        service,
+        "_resolve_daily_watchlist",
+        lambda force_refresh=False: {
+            "source": "seeking_alpha_cache",
+            "tickers": list(tickers),
+            "fetched_at": "2026-05-23T08:10:27Z",
+            "screenshots": [],
+            "error": None,
+            "stale": False,
+        },
+    )
+
+
 def test_build_opencode_config_uses_opencode_json(tmp_path, monkeypatch):
     opencode_path = tmp_path / "opencode.json"
     opencode_path.write_text(json.dumps({"model": "opencode/test-model"}), encoding="utf-8")
@@ -368,7 +383,7 @@ def test_prepare_daily_run_builds_manifest(tmp_path, monkeypatch):
     reports_dir = tmp_path / "reports"
     monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
-    monkeypatch.setattr(service, "DEFAULT_DAILY_TICKERS", ("SPY", "NVDA", "AAPL"))
+    _stub_daily_watchlist(monkeypatch, ("SPY", "NVDA", "AAPL"))
 
     manifest = service.prepare_daily_run("2026-05-09")
 
@@ -383,7 +398,7 @@ def test_queue_daily_run_only_queues_incomplete_entries(tmp_path, monkeypatch):
     reports_dir = tmp_path / "reports"
     monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
-    monkeypatch.setattr(service, "DEFAULT_DAILY_TICKERS", ("SPY", "NVDA"))
+    _stub_daily_watchlist(monkeypatch, ("SPY", "NVDA"))
 
     log_dir = reports_dir / "SPY" / "TradingAgentsStrategy_logs"
     log_dir.mkdir(parents=True)
@@ -462,7 +477,7 @@ def test_run_job_updates_daily_manifest_with_rating(tmp_path, monkeypatch):
     reports_dir = tmp_path / "reports"
     monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
-    monkeypatch.setattr(service, "DEFAULT_DAILY_TICKERS", ("SPY",))
+    _stub_daily_watchlist(monkeypatch, ("SPY",))
 
     class FakeGraph:
         def __init__(self, debug, config):
@@ -508,7 +523,7 @@ def test_queue_daily_run_recovers_concatenated_manifest(tmp_path, monkeypatch):
     reports_dir = tmp_path / "reports"
     monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
-    monkeypatch.setattr(service, "DEFAULT_DAILY_TICKERS", ("SPY", "NVDA"))
+    _stub_daily_watchlist(monkeypatch, ("SPY", "NVDA"))
 
     daily_dir = reports_dir / service.DAILY_RUNS_DIRNAME
     daily_dir.mkdir(parents=True)
@@ -516,8 +531,7 @@ def test_queue_daily_run_recovers_concatenated_manifest(tmp_path, monkeypatch):
         json.dumps(
             {
                 "trade_date": "2026-05-09",
-                "source": "hardcoded",
-                "policy": [],
+                "source": "seeking_alpha_cache",
                 "tickers": [],
                 "created_at": "2026-05-09T00:00:00Z",
                 "updated_at": "2026-05-09T00:00:00Z",
@@ -529,8 +543,7 @@ def test_queue_daily_run_recovers_concatenated_manifest(tmp_path, monkeypatch):
         + json.dumps(
             {
                 "trade_date": "2026-05-09",
-                "source": "hardcoded",
-                "policy": [],
+                "source": "seeking_alpha_cache",
                 "tickers": [],
                 "created_at": "2026-05-09T01:00:00Z",
                 "updated_at": "2026-05-09T01:00:00Z",

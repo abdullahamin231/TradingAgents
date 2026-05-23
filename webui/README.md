@@ -30,11 +30,11 @@ export TRADINGAGENTS_WEB_MAX_WORKERS=4
 - Uses `opencode.json` defaults when provider is `opencode`.
 
 ### Daily Coverage
-- Shows the current daily watchlist and policy mapping.
+- Shows the current daily watchlist.
 - Prepares a per-date manifest under `reports/daily_runs/`.
 - Queues only incomplete tickers for the selected date.
 - Supports retrying failed tickers.
-- Uses a Seeking Alpha-backed watchlist instead of the hardcoded default when the fetch succeeds.
+- Uses the Seeking Alpha watchlist artifact as the daily ticker source.
 - Can screen the Daily Coverage list through HalalScreener before queueing analysis.
 - Includes a `Rescrape tickers` button to force-refresh the watchlist.
 
@@ -66,7 +66,7 @@ The Daily Coverage watchlist is fetched from Seeking Alpha screen:
 Current implementation:
 
 - prefers direct API extraction from Seeking Alpha using a cookie secret file
-- reuses the most recent cached watchlist if a refresh fails, and falls back to the static `DEFAULT_DAILY_TICKERS` list only when no usable cache exists
+- reuses the most recent cached watchlist if a refresh fails, and returns an empty watchlist with an error when no usable cache exists
 - stores preserved watchlist/debug artifacts under `webui_artifacts/seeking_alpha_watchlist/`
 
 ## Halal Screening

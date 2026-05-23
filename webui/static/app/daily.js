@@ -2,7 +2,6 @@ import {
   dailyDateInput,
   dailyMessage,
   dailyPortfolioExecution,
-  dailyPolicy,
   dailyPrepareButton,
   dailyRescrapeButton,
   dailyRunMissingButton,
@@ -126,7 +125,6 @@ function renderWatchlistDiff(diff = null) {
 
 export function renderDailyWatchlist(payload) {
   const tickers = uniqueTickers(payload.tickers || []);
-  const policy = payload.policy || [];
   const metadata = payload.metadata || {};
   const screening = metadata.screening || {};
   const displayScreening = shouldShowCompliance(screening) ? screening : {};
@@ -143,20 +141,6 @@ export function renderDailyWatchlist(payload) {
     : "No watchlist configured.";
   renderWatchlistHoldings({ ...metadata, screening: displayScreening }, tickers);
   renderWatchlistDiff(state.dailyWatchlistDiff);
-
-  dailyPolicy.className = policy.length ? "policy-list" : "policy-list empty-state";
-  dailyPolicy.innerHTML = policy.length
-    ? policy
-        .map(
-          (item) => `
-            <article class="policy-item">
-              <strong>${escapeHtml(item.rating)}</strong>
-              <p>${escapeHtml(item.action)}</p>
-            </article>
-          `
-        )
-        .join("")
-    : "No policy configured.";
   state.dailyWatchlistPayload = payload;
 }
 

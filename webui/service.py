@@ -52,16 +52,6 @@ _halal_screening_refresh_state: dict[str, Any] = {
 }
 OPENCODE_DEFAULT_QUICK_MODEL = "openai/gpt-5.4-mini"
 OPENCODE_DEFAULT_DEEP_MODEL = "openai/gpt-5.4"
-DEFAULT_DAILY_TICKERS = (
-    "MU","SNDK","MXL","LITE","AXTI","ICHR","AMD","SIMO","PBR.A","TSM","PBR","UCTT","SNEX","ASX","CRDO","DGELL","NVTS","TTE","COHU","BAC"
-)
-DAILY_COVERAGE_POLICY = (
-    {"rating": "Buy", "action": "Allocate $5,000 into the ticker"},
-    {"rating": "Sell", "action": "Sell off completely"},
-    {"rating": "Underweight", "action": "Buy $2,000 more"},
-    {"rating": "Overweight", "action": "Sell $2,000 and hold"},
-    {"rating": "Hold", "action": "Hold the current position"},
-)
 WORKFLOW_ON_DEMAND = "analysis_on_demand"
 WORKFLOW_DAILY_COVERAGE = "daily_coverage"
 PROVIDER_OPTIONS = [
@@ -225,7 +215,6 @@ def _halal_screening_target_tickers() -> tuple[str, ...]:
     return tuple(
         dict.fromkeys(
             [
-                *DEFAULT_DAILY_TICKERS,
                 *watchlist.get("tickers", ()),
                 *service_portfolio.portfolio_holdings_tickers(_portfolio_paths()),
             ]
@@ -266,7 +255,6 @@ def halal_screening_status() -> dict[str, Any]:
 def _resolve_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
     payload = fetch_seeking_alpha_watchlist(
         cache_dir=_daily_watchlist_cache_dir(),
-        default_tickers=DEFAULT_DAILY_TICKERS,
         force_refresh=force_refresh,
     )
     return payload.to_payload()
@@ -394,7 +382,6 @@ def _load_daily_manifest(trade_date: str) -> dict[str, Any]:
         source=str(watchlist["source"]),
         default_daily_tickers=coverage_tickers,
         watchlist_tickers=tuple(watchlist["tickers"]),
-        daily_coverage_policy=DAILY_COVERAGE_POLICY,
         snapshot_loader=_saved_report_snapshot,
     )
     if not get_settings().get("halal_checker_enabled", True):
@@ -532,7 +519,7 @@ def get_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
         "eligible_tickers": list(watchlist.get("eligible_tickers", watchlist["tickers"])),
         "screening": _daily_screening_display_payload(coverage_tickers),
     }
-    return service_daily.get_daily_watchlist(str(watchlist["source"]), raw_watchlist_tickers, DAILY_COVERAGE_POLICY, metadata)
+    return service_daily.get_daily_watchlist(str(watchlist["source"]), raw_watchlist_tickers, metadata)
 
 
 def prepare_daily_run(trade_date: str, *, force_refresh_watchlist: bool = False) -> dict[str, Any]:
@@ -545,7 +532,6 @@ def prepare_daily_run(trade_date: str, *, force_refresh_watchlist: bool = False)
         source=str(watchlist["source"]),
         default_daily_tickers=coverage_tickers,
         watchlist_tickers=tuple(watchlist["tickers"]),
-        daily_coverage_policy=DAILY_COVERAGE_POLICY,
         manifest_loader=_load_daily_manifest,
         manifest_writer=_write_daily_manifest,
         snapshot_loader=_saved_report_snapshot,

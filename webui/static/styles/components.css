@@ -36,7 +36,6 @@
 .pane-header p,
 .section-head p,
 .usage-chart-head p,
-.policy-item p,
 .ticker-summary,
 .report-browser-meta,
 .empty-state,
@@ -83,7 +82,6 @@
 }
 
 .jobs-list,
-.policy-list,
 .ticker-summary,
 .report-view,
 .report-file-list,
@@ -96,7 +94,6 @@
 }
 
 .job-entry,
-.policy-item,
 .summary-item,
 .report-meta-item,
 .usage-card,

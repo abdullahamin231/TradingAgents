@@ -12,7 +12,6 @@ export const dailyWatchlist = document.querySelector("#daily-watchlist");
 export const dailyWatchlistMeta = document.querySelector("#daily-watchlist-meta");
 export const dailyWatchlistHoldings = document.querySelector("#daily-watchlist-holdings");
 export const dailyWatchlistDiff = document.querySelector("#daily-watchlist-diff");
-export const dailyPolicy = document.querySelector("#daily-policy");
 export const dailySummary = document.querySelector("#daily-summary");
 export const dailyPortfolioExecution = document.querySelector("#daily-portfolio-execution");
 export const dailyStatusTable = document.querySelector("#daily-status-table");
