@@ -33,6 +33,7 @@ services:
     environment:
       WATCH_BRANCH: main
       WATCH_INTERVAL_SECONDS: 900 # 15 minutes
+      WEBUI_SERVICE: webui
       WEBUI_CONTAINER: tradingagents-webui
       GIT_SSH_COMMAND: ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/tmp/known_hosts
     volumes:
@@ -55,7 +56,11 @@ services:
               remote_commit="$$(git rev-parse "origin/$$WATCH_BRANCH")"
 
               if [ "$$local_commit" != "$$remote_commit" ]; then
-                git pull --ff-only origin "$$WATCH_BRANCH" && docker restart "$$WEBUI_CONTAINER"
+                # Recreate the service so updated code, dependencies, and compose
+                # settings all take effect; fall back to a restart if compose is unavailable.
+                if git pull --ff-only origin "$$WATCH_BRANCH"; then
+                  docker compose up -d --build --force-recreate --no-deps "$$WEBUI_SERVICE" || docker restart "$$WEBUI_CONTAINER"
+                fi
               fi
             else
               echo "Skipping update: git fetch failed for origin/$$WATCH_BRANCH"

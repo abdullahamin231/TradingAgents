@@ -9,7 +9,7 @@ uvicorn webui.app:app --reload
 Docker Compose starts the WebUI on port `2026` and runs a companion updater
 that checks `origin/main` every 15 minutes. When the local checkout is on
 `main` and a newer commit is available, it runs a fast-forward-only pull and
-restarts the WebUI container:
+recreates the WebUI service with the updated source tree and image:
 
 ```bash
 docker compose up -d webui webui-watchtower
