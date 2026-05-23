@@ -1,5 +1,6 @@
 import {
   settingsDailyRunTime,
+  settingsBrokerProvider,
   settingsHalalCheckerEnabled,
   settingsHalalStatus,
   settingsMessage,
@@ -18,10 +19,12 @@ function renderSettings(payload) {
   state.settings = payload;
   settingsHalalCheckerEnabled.checked = Boolean(payload.halal_checker_enabled);
   settingsDailyRunTime.value = payload.daily_run_time || "09:30";
+  settingsBrokerProvider.value = payload.broker_provider || "alpaca_paper";
   settingsSummary.className = "portfolio-banner";
   settingsSummary.innerHTML = `
     <strong>Daily automation</strong>
     <span>Runs at ${escapeHtml(payload.daily_run_time || "09:30")} ${escapeHtml(payload.daily_run_timezone || "America/New_York")}.</span>
+    <span>Broker: ${escapeHtml(payload.broker_provider || "alpaca_paper")}.</span>
     <span>Halal checker: ${payload.halal_checker_enabled ? "enabled" : "disabled"}.</span>
     <span>Last scheduled run: ${escapeHtml(payload.last_scheduled_daily_run_date || "none")}.</span>
   `;
@@ -128,6 +131,7 @@ export async function saveSettings() {
       body: JSON.stringify({
         halal_checker_enabled: settingsHalalCheckerEnabled.checked,
         daily_run_time: settingsDailyRunTime.value || "09:30",
+        broker_provider: settingsBrokerProvider.value || "alpaca_paper",
       }),
     });
     const payload = await response.json();
@@ -180,4 +184,5 @@ export function bindSettingsActions() {
   settingsRunHalalForcedButton.addEventListener("click", () => runHalalScreeningRefresh({ forceRefresh: true }));
   settingsHalalCheckerEnabled.addEventListener("change", () => setMessage(settingsMessage, ""));
   settingsDailyRunTime.addEventListener("input", () => setMessage(settingsMessage, ""));
+  settingsBrokerProvider.addEventListener("change", () => setMessage(settingsMessage, ""));
 }

@@ -37,6 +37,7 @@ export const tokenUsageCharts = document.querySelector("#token-usage-charts");
 export const tokenUsageRuns = document.querySelector("#token-usage-runs");
 export const settingsHalalCheckerEnabled = document.querySelector("#settings-halal-checker-enabled");
 export const settingsDailyRunTime = document.querySelector("#settings-daily-run-time");
+export const settingsBrokerProvider = document.querySelector("#settings-broker-provider");
 export const settingsSaveButton = document.querySelector("#settings-save");
 export const settingsRunHalalButton = document.querySelector("#settings-run-halal-check");
 export const settingsRunHalalForcedButton = document.querySelector("#settings-run-halal-check-forced");

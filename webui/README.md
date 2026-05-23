@@ -47,6 +47,12 @@ export TRADINGAGENTS_WEB_MAX_WORKERS=4
 - Aggregates OpenCode token telemetry across saved runs and in-memory jobs.
 - Shows totals and time-series charts.
 
+### Portfolio Automation
+- Builds a daily rebalance plan from completed Daily Coverage ratings.
+- Syncs the selected broker before generating live order intents.
+- Supports `alpaca_paper` and `webull_paper` brokerage providers.
+- Automatic Daily Coverage finalization uses the persisted Settings broker; default is `alpaca_paper`.
+
 ### Settings
 - Toggle the halal checker. It defaults to enabled; when disabled, Shariah compliance is not checked or marked.
 - Configure the automatic Daily Coverage run time. It defaults to `09:30` in `America/New_York`.
@@ -104,6 +110,36 @@ python scripts/bootstrap_seeking_alpha_auth.py --output /absolute/path/to/seekin
 
 That helper opens a real browser, lets you log in manually, and writes a reusable cookie secret file for server-side watchlist refreshes.
 
+## Broker Configuration
+
+Select the brokerage used by automatic daily execution in the Settings tab. The value is saved in `webui_artifacts/settings.json`.
+
+The environment variable remains a fallback for first-run defaults and non-UI use:
+
+```bash
+export TRADINGAGENTS_BROKER_PROVIDER=webull_paper
+```
+
+Alpaca paper trading:
+
+```bash
+export APCA_API_KEY_ID=your_alpaca_key
+export APCA_API_SECRET_KEY=your_alpaca_secret
+```
+
+Webull paper/test trading uses Webull OpenAPI signed HTTPS requests. By default it points at Webull's UAT host `us-openapi-alb.uat.webullbroker.com`; override it only if Webull gives you a different endpoint.
+
+```bash
+export WEBULL_APP_KEY=your_webull_app_key
+export WEBULL_APP_SECRET=your_webull_app_secret
+export WEBULL_ACCOUNT_ID=your_webull_account_id
+export WEBULL_ACCESS_TOKEN=optional_2fa_token
+export WEBULL_API_HOST=us-openapi-alb.uat.webullbroker.com
+export WEBULL_ENV=paper
+```
+
+If `WEBULL_ACCOUNT_ID` is omitted, the integration calls `/openapi/account/list` and uses the first account returned. If your Webull app has 2FA enabled, set `WEBULL_ACCESS_TOKEN` to an active token.
+
 ## Main API Endpoints
 
 - `GET /api/jobs`
@@ -111,6 +147,8 @@ That helper opens a real browser, lets you log in manually, and writes a reusabl
 - `POST /api/jobs`
 - `POST /api/on-demand/run`
 - `GET /api/providers`
+- `GET /api/brokers`
+- `POST /api/portfolio/{broker_provider}/sync`
 - `GET /api/daily-watchlist`
 - `POST /api/daily-watchlist/refresh`
 - `GET /api/daily-runs/{trade_date}`

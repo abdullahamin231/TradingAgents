@@ -10,6 +10,8 @@ import requests
 
 from tradingagents.dataflows.utils import safe_ticker_component
 
+from .service_broker import BrokerError
+
 
 DEFAULT_ALPACA_PAPER_BASE_URL = "https://paper-api.alpaca.markets"
 
@@ -29,7 +31,7 @@ class AlpacaPaperConfig:
     base_url: str = DEFAULT_ALPACA_PAPER_BASE_URL
 
 
-class AlpacaPaperError(RuntimeError):
+class AlpacaPaperError(BrokerError):
     pass
 
 
@@ -189,3 +191,28 @@ def submit_rebalance_orders(
         "submitted_order_count": len(submitted_orders),
         "submitted_at": _utcnow(),
     }
+
+
+class AlpacaPaperBroker:
+    provider = "alpaca"
+    environment = "paper"
+
+    def __init__(self, config: AlpacaPaperConfig | None = None):
+        self.config = config
+
+    def get_account_snapshot(self) -> dict[str, Any]:
+        return get_account_snapshot(self.config)
+
+    def submit_rebalance_orders(
+        self,
+        order_intents: list[dict[str, Any]],
+        *,
+        current_portfolio: dict[str, Any],
+        trade_date: str,
+    ) -> dict[str, Any]:
+        return submit_rebalance_orders(
+            order_intents,
+            current_portfolio=current_portfolio,
+            trade_date=trade_date,
+            config=self.config,
+        )

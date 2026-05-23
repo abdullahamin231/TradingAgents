@@ -20,7 +20,7 @@ from tradingagents.llm_clients.model_catalog import get_model_options
 from tradingagents.llm_clients.provider_urls import get_ollama_base_url
 from tradingagents.reporting import save_complete_report
 
-from . import halal_screening, service_alpaca, service_daily, service_portfolio, service_reports, settings
+from . import halal_screening, service_broker, service_daily, service_portfolio, service_reports, settings
 from .seeking_alpha import fetch_seeking_alpha_watchlist
 from .service_helpers import PathsConfig, SAVED_REPORT_ID_PATTERN, TOKEN_USAGE_FILENAME, atomic_write_json, markdown_to_html, token_usage_path
 from .service_usage import TokenUsageCollector, get_token_usage_payload, iter_saved_usage_records
@@ -674,7 +674,18 @@ def update_portfolio_state(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def sync_alpaca_paper_portfolio() -> dict[str, Any]:
-    snapshot = service_alpaca.get_account_snapshot()
+    snapshot = service_broker.get_broker("alpaca_paper").get_account_snapshot()
+    return update_portfolio_state(snapshot)
+
+
+def list_broker_options() -> list[dict[str, str]]:
+    return service_broker.list_broker_options()
+
+
+def sync_broker_portfolio(provider: str | None = None) -> dict[str, Any]:
+    broker_provider = provider or str(get_settings().get("broker_provider") or "")
+    broker = service_broker.get_broker(broker_provider)
+    snapshot = broker.get_account_snapshot()
     return update_portfolio_state(snapshot)
 
 
@@ -719,8 +730,12 @@ def execute_daily_rebalance_plan(
     *,
     total_equity: float | None = None,
     max_positions: int = service_portfolio.DEFAULT_TARGET_POSITION_COUNT,
+    broker: service_broker.PaperBroker | None = None,
+    broker_provider: str | None = None,
 ) -> dict[str, Any]:
-    current_portfolio = sync_alpaca_paper_portfolio()
+    resolved_provider = broker_provider or str(get_settings().get("broker_provider") or "")
+    resolved_broker = broker or service_broker.get_broker(resolved_provider)
+    current_portfolio = update_portfolio_state(resolved_broker.get_account_snapshot())
     plan = build_daily_rebalance_plan(
         trade_date,
         total_equity=total_equity or current_portfolio.get("total_equity"),
@@ -735,7 +750,7 @@ def execute_daily_rebalance_plan(
         result = {
             "execution_id": f"{trade_date}-no-orders",
             "trade_date": trade_date,
-            "broker": {"provider": "alpaca", "environment": "paper"},
+            "broker": {"provider": resolved_broker.provider, "environment": resolved_broker.environment},
             "submitted_orders": [],
             "submitted_order_count": 0,
             "submitted_at": datetime.utcnow().isoformat() + "Z",
@@ -745,7 +760,7 @@ def execute_daily_rebalance_plan(
         service_portfolio.write_execution_result(_portfolio_paths(), result)
         return result
 
-    execution = service_alpaca.submit_rebalance_orders(
+    execution = resolved_broker.submit_rebalance_orders(
         plan.get("order_intents", []),
         current_portfolio=plan.get("current_portfolio", {}),
         trade_date=trade_date,

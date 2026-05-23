@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .service_broker import DEFAULT_BROKER_PROVIDER, normalize_broker_provider
 from .service_helpers import atomic_write_json, load_json_payload
 
 
@@ -19,6 +20,7 @@ def default_settings() -> dict[str, Any]:
         "halal_checker_enabled": DEFAULT_HALAL_CHECKER_ENABLED,
         "daily_run_time": DEFAULT_DAILY_RUN_TIME,
         "daily_run_timezone": DAILY_RUN_TIMEZONE,
+        "broker_provider": DEFAULT_BROKER_PROVIDER,
         "last_scheduled_daily_run_date": None,
         "updated_at": None,
     }
@@ -65,6 +67,8 @@ def _normalize_settings(payload: dict[str, Any], *, include_operational: bool) -
         normalized["halal_checker_enabled"] = bool(payload.get("halal_checker_enabled"))
     if "daily_run_time" in payload:
         normalized["daily_run_time"] = normalize_daily_run_time(payload.get("daily_run_time"))
+    if "broker_provider" in payload:
+        normalized["broker_provider"] = normalize_broker_provider(payload.get("broker_provider"))
     if include_operational and isinstance(payload.get("last_scheduled_daily_run_date"), str):
         normalized["last_scheduled_daily_run_date"] = payload["last_scheduled_daily_run_date"]
     return normalized

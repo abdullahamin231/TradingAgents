@@ -1,7 +1,8 @@
 {
+  "broker_provider": "alpaca_paper",
   "daily_run_time": "09:30",
   "daily_run_timezone": "America/New_York",
-  "halal_checker_enabled": false,
+  "halal_checker_enabled": true,
   "last_scheduled_daily_run_date": "2026-05-22",
-  "updated_at": "2026-05-22T20:25:38.340151Z"
+  "updated_at": "2026-05-23T08:07:27.999427Z"
 }
