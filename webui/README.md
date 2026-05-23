@@ -7,13 +7,18 @@ uvicorn webui.app:app --reload
 ```
 
 Docker Compose starts the WebUI on port `2026` and runs a companion updater
-that checks `origin/main` every 60 seconds. When the local checkout is on
+that checks `origin/main` every 15 minutes. When the local checkout is on
 `main` and a newer commit is available, it runs a fast-forward-only pull and
 restarts the WebUI container:
 
 ```bash
 docker compose up -d webui webui-watchtower
 ```
+
+The updater runs inside its own container, so host Git authorization is not
+inherited automatically. The compose service mounts `/root/.ssh` into the
+updater container; make sure the server's root user can run
+`git fetch origin main` from `/root/TradingAgents`.
 
 Optional worker count:
 
