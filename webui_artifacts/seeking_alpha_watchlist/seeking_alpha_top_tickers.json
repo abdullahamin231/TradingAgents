@@ -22,9 +22,9 @@
     "ASX",
     "PUMP"
   ],
-  "fetched_at": "2026-05-22T20:22:34.309867Z",
+  "fetched_at": "2026-05-23T17:07:54.513053Z",
   "screenshots": [
-    "/home/appuser/app/webui_artifacts/seeking_alpha_watchlist/debug_runs/22-May-2026-08-22-PM/01-screener_results.json"
+    "/home/appuser/app/webui_artifacts/seeking_alpha_watchlist/debug_runs/23-May-2026-05-07-PM/01-screener_results.json"
   ],
   "error": null,
   "stale": false
