@@ -221,4 +221,7 @@ __marimo__/
 **/data_cache/
 reports/
 seeking_alpha_cookies.json
+webui_artifacts/seeking_alpha_watchlist/seeking_alpha_top_tickers.json
+webui_artifacts/halal_screening_cache.json
+webui_artifacts/settings.json
 webui_artifacts/seeking_alpha_watchlist/*
