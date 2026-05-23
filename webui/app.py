@@ -7,7 +7,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -20,6 +20,7 @@ from .service import (
     get_daily_watchlist,
     get_portfolio_state,
     get_token_usage,
+    generate_daily_html_report,
     halal_screening_status,
     list_llm_providers,
     list_broker_options,
@@ -36,7 +37,10 @@ from .service import (
     sync_alpaca_paper_portfolio,
     update_settings,
     update_portfolio_state,
+    send_daily_notification,
 )
+from .service import _paths
+from . import service_html_reports
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -145,6 +149,17 @@ def index(request: Request) -> HTMLResponse:
             "today": date.today().isoformat(),
         },
     )
+
+
+@app.get("/reports/share", response_class=HTMLResponse)
+def shared_report(path: str) -> FileResponse:
+    try:
+        report_path = service_html_reports.resolve_shared_report_path(_paths(), path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Report not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return FileResponse(report_path, media_type="text/html")
 
 
 @app.get("/api/jobs")
@@ -346,6 +361,22 @@ def rebalance_plan(trade_date: str, payload: RebalancePlanRequest) -> dict:
             max_positions=payload.max_positions,
             apply_targets=payload.apply_targets,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/daily-runs/{trade_date}/html-report")
+def daily_html_report(trade_date: str) -> dict:
+    try:
+        return generate_daily_html_report(trade_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/daily-runs/{trade_date}/notify")
+def notify_daily_run(trade_date: str) -> dict:
+    try:
+        return send_daily_notification(trade_date, phase="manual")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

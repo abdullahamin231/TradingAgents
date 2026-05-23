@@ -53,6 +53,13 @@ export TRADINGAGENTS_WEB_MAX_WORKERS=4
 - Supports `alpaca_paper` and `webull_paper` brokerage providers.
 - Automatic Daily Coverage finalization uses the persisted Settings broker; default is `alpaca_paper`.
 
+### Telegram Notifications and HTML Reports
+- Generates a daily HTML report under `reports/daily_html/<trade-date>.html`.
+- Serves share links through `GET /reports/share?path=reports/daily_html/<trade-date>.html`.
+- Uses the report path in the URL query string, so no database table is required for sharing.
+- Sends Telegram updates when automatic Daily Coverage is queued and again when final portfolio automation completes.
+- Includes portfolio status, coverage status, proposed trades, trade reasoning, and a shareable HTML report link.
+
 ### Settings
 - Toggle the halal checker. It defaults to enabled; when disabled, Shariah compliance is not checked or marked.
 - Configure the automatic Daily Coverage run time. It defaults to `09:30` in `America/New_York`.
@@ -140,6 +147,25 @@ export WEBULL_ENV=paper
 
 If `WEBULL_ACCOUNT_ID` is omitted, the integration calls `/openapi/account/list` and uses the first account returned. If your Webull app has 2FA enabled, set `WEBULL_ACCESS_TOKEN` to an active token.
 
+## Telegram Configuration
+
+Create a Telegram bot with BotFather, add it to the target chat, and configure:
+
+```bash
+export TELEGRAM_BOT_TOKEN=123456:your_bot_token
+export TELEGRAM_CHAT_ID=your_chat_id
+export TRADINGAGENTS_PUBLIC_BASE_URL=https://your-public-webui-host
+```
+
+Optional overrides:
+
+```bash
+export TELEGRAM_API_BASE_URL=https://api.telegram.org
+export TELEGRAM_TIMEOUT_SECONDS=10
+```
+
+`TRADINGAGENTS_PUBLIC_BASE_URL` is used to build report links in Telegram. If it is omitted, links default to `http://localhost:2026`.
+
 ## Main API Endpoints
 
 - `GET /api/jobs`
@@ -155,6 +181,9 @@ If `WEBULL_ACCOUNT_ID` is omitted, the integration calls `/openapi/account/list`
 - `POST /api/daily-runs/{trade_date}/prepare`
 - `POST /api/daily-runs/{trade_date}/run-missing`
 - `POST /api/daily-runs/{trade_date}/tickers/{ticker}/retry`
+- `POST /api/daily-runs/{trade_date}/html-report`
+- `POST /api/daily-runs/{trade_date}/notify`
+- `GET /reports/share?path=reports/daily_html/{trade_date}.html`
 - `GET /api/tickers`
 - `GET /api/tickers/{ticker}/reports`
 - `GET /api/tickers/{ticker}/reports/{report_id}`
