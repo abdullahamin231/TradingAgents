@@ -519,18 +519,20 @@ def load_report(ticker: str, report_id: str) -> dict[str, Any]:
 
 def get_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
     watchlist = _resolve_screened_daily_watchlist(force_refresh=force_refresh)
+    raw_watchlist_tickers = tuple(watchlist.get("raw_tickers") or watchlist["tickers"])
     holdings = list(service_portfolio.portfolio_holdings_tickers(_portfolio_paths()))
-    coverage_tickers = _daily_coverage_tickers(tuple(watchlist["tickers"]))
+    coverage_tickers = _daily_coverage_tickers(raw_watchlist_tickers)
     metadata = {
         "fetched_at": watchlist.get("fetched_at"),
         "screenshots": list(watchlist.get("screenshots", [])),
         "error": watchlist.get("error"),
         "stale": bool(watchlist.get("stale", False)),
         "existing_holdings": holdings,
-        "raw_tickers": list(watchlist.get("raw_tickers", [])),
+        "raw_tickers": list(raw_watchlist_tickers),
+        "eligible_tickers": list(watchlist.get("eligible_tickers", watchlist["tickers"])),
         "screening": _daily_screening_display_payload(coverage_tickers),
     }
-    return service_daily.get_daily_watchlist(str(watchlist["source"]), tuple(watchlist["tickers"]), DAILY_COVERAGE_POLICY, metadata)
+    return service_daily.get_daily_watchlist(str(watchlist["source"]), raw_watchlist_tickers, DAILY_COVERAGE_POLICY, metadata)
 
 
 def prepare_daily_run(trade_date: str, *, force_refresh_watchlist: bool = False) -> dict[str, Any]:
