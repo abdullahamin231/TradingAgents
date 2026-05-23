@@ -324,7 +324,6 @@ def apply_stealth_init_script(context: Any) -> None:
 def _failed_refresh_fallback(
     *,
     cache_dir: Path,
-    default_tickers: tuple[str, ...],
     stale_cached: SeekingAlphaWatchlist | None,
     error: str,
     screenshots: tuple[str, ...] = (),
@@ -341,22 +340,19 @@ def _failed_refresh_fallback(
         _write_cache(cache_dir, payload)
         return payload
 
-    payload = SeekingAlphaWatchlist(
-        source="hardcoded",
-        tickers=default_tickers,
-        fetched_at=_utcnow().isoformat().replace("+00:00", "Z"),
+    return SeekingAlphaWatchlist(
+        source="seeking_alpha_cache",
+        tickers=(),
+        fetched_at=None,
         screenshots=screenshots,
-        error=error,
-        stale=False,
+        error=f"{error}; no cached Seeking Alpha ticker artifact found",
+        stale=True,
     )
-    _write_cache(cache_dir, payload)
-    return payload
 
 
 def fetch_seeking_alpha_watchlist(
     *,
     cache_dir: Path,
-    default_tickers: tuple[str, ...],
     cookies_path: str | Path | None = None,
     force_refresh: bool = False,
     ttl_hours: int = SEEKING_ALPHA_CACHE_TTL_HOURS,
@@ -372,7 +368,6 @@ def fetch_seeking_alpha_watchlist(
     except RuntimeError as exc:
         return _failed_refresh_fallback(
             cache_dir=cache_dir,
-            default_tickers=default_tickers,
             stale_cached=stale_cached,
             error=str(exc),
         )
@@ -398,7 +393,6 @@ def fetch_seeking_alpha_watchlist(
     except (requests.RequestException, RuntimeError, OSError, json.JSONDecodeError) as api_exc:
         return _failed_refresh_fallback(
             cache_dir=cache_dir,
-            default_tickers=default_tickers,
             stale_cached=stale_cached,
             error=f"{api_exc} (auth source: {auth_source_path})",
             screenshots=tuple(screenshot_paths),

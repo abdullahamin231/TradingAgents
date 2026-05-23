@@ -330,7 +330,7 @@ async function requestRebalancePlan() {
       return;
     }
     renderRebalancePlan(payload);
-    setMessage(portfolioMessage, "Generated preview from the latest saved portfolio snapshot. Daily coverage execution syncs Alpaca before placing orders.");
+    setMessage(portfolioMessage, "Generated preview from the latest saved portfolio snapshot. Daily coverage execution syncs the configured broker before placing orders.");
   } catch (error) {
     setMessage(portfolioMessage, error.message || "Failed to generate rebalance plan.", true);
   }
@@ -348,19 +348,20 @@ export async function generateRebalancePlan() {
 export async function syncBrokerPortfolio() {
   portfolioSyncBrokerButton.disabled = true;
   try {
-    const response = await fetch("/api/portfolio/alpaca-paper/sync", {
+    const brokerProvider = state.settings?.broker_provider || "alpaca_paper";
+    const response = await fetch(`/api/portfolio/${encodeURIComponent(brokerProvider)}/sync`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
     });
     const payload = await response.json();
     if (!response.ok) {
-      setMessage(portfolioMessage, payload.detail || "Failed to sync Alpaca paper portfolio.", true);
+      setMessage(portfolioMessage, payload.detail || "Failed to sync broker paper portfolio.", true);
       return;
     }
     renderCurrentPortfolio(payload);
-    setMessage(portfolioMessage, "Synced live Alpaca paper portfolio.");
+    setMessage(portfolioMessage, "Synced live broker paper portfolio.");
   } catch (error) {
-    setMessage(portfolioMessage, error.message || "Failed to sync Alpaca paper portfolio.", true);
+    setMessage(portfolioMessage, error.message || "Failed to sync broker paper portfolio.", true);
   } finally {
     portfolioSyncBrokerButton.disabled = false;
   }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -20,7 +21,7 @@ from tradingagents.llm_clients.model_catalog import get_model_options
 from tradingagents.llm_clients.provider_urls import get_ollama_base_url
 from tradingagents.reporting import save_complete_report
 
-from . import halal_screening, service_alpaca, service_daily, service_portfolio, service_reports, settings
+from . import halal_screening, service_broker, service_daily, service_html_reports, service_notifications, service_portfolio, service_reports, settings
 from .seeking_alpha import fetch_seeking_alpha_watchlist
 from .service_helpers import PathsConfig, SAVED_REPORT_ID_PATTERN, TOKEN_USAGE_FILENAME, atomic_write_json, markdown_to_html, token_usage_path
 from .service_usage import TokenUsageCollector, get_token_usage_payload, iter_saved_usage_records
@@ -34,7 +35,7 @@ REPORTS_DIR = REPO_ROOT / "reports"
 OPENCODE_CONFIG_PATH = REPO_ROOT / "opencode.json"
 DAILY_RUNS_DIRNAME = "daily_runs"
 PORTFOLIO_DIRNAME = "portfolio"
-REPORTS_SYSTEM_DIRS = {"cache", "memory", DAILY_RUNS_DIRNAME, PORTFOLIO_DIRNAME, "_legacy_root_artifacts"}
+REPORTS_SYSTEM_DIRS = {"cache", "memory", DAILY_RUNS_DIRNAME, PORTFOLIO_DIRNAME, service_html_reports.DAILY_HTML_DIRNAME, "_legacy_root_artifacts"}
 _daily_manifest_lock = threading.RLock()
 _halal_screening_refresh_lock = threading.Lock()
 _halal_screening_refresh_state: dict[str, Any] = {
@@ -52,16 +53,6 @@ _halal_screening_refresh_state: dict[str, Any] = {
 }
 OPENCODE_DEFAULT_QUICK_MODEL = "openai/gpt-5.4-mini"
 OPENCODE_DEFAULT_DEEP_MODEL = "openai/gpt-5.4"
-DEFAULT_DAILY_TICKERS = (
-    "MU","SNDK","MXL","LITE","AXTI","ICHR","AMD","SIMO","PBR.A","TSM","PBR","UCTT","SNEX","ASX","CRDO","DGELL","NVTS","TTE","COHU","BAC"
-)
-DAILY_COVERAGE_POLICY = (
-    {"rating": "Buy", "action": "Allocate $5,000 into the ticker"},
-    {"rating": "Sell", "action": "Sell off completely"},
-    {"rating": "Underweight", "action": "Buy $2,000 more"},
-    {"rating": "Overweight", "action": "Sell $2,000 and hold"},
-    {"rating": "Hold", "action": "Hold the current position"},
-)
 WORKFLOW_ON_DEMAND = "analysis_on_demand"
 WORKFLOW_DAILY_COVERAGE = "daily_coverage"
 PROVIDER_OPTIONS = [
@@ -174,6 +165,10 @@ def _settings_path() -> Path:
     return REPO_ROOT / "webui_artifacts" / "settings.json"
 
 
+def _public_base_url() -> str:
+    return (os.getenv("TRADINGAGENTS_PUBLIC_BASE_URL") or "http://localhost:2026").rstrip("/")
+
+
 def _halal_screening_cache_path() -> Path:
     return REPO_ROOT / "webui_artifacts" / "halal_screening_cache.json"
 
@@ -225,7 +220,6 @@ def _halal_screening_target_tickers() -> tuple[str, ...]:
     return tuple(
         dict.fromkeys(
             [
-                *DEFAULT_DAILY_TICKERS,
                 *watchlist.get("tickers", ()),
                 *service_portfolio.portfolio_holdings_tickers(_portfolio_paths()),
             ]
@@ -266,7 +260,6 @@ def halal_screening_status() -> dict[str, Any]:
 def _resolve_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
     payload = fetch_seeking_alpha_watchlist(
         cache_dir=_daily_watchlist_cache_dir(),
-        default_tickers=DEFAULT_DAILY_TICKERS,
         force_refresh=force_refresh,
     )
     return payload.to_payload()
@@ -394,7 +387,6 @@ def _load_daily_manifest(trade_date: str) -> dict[str, Any]:
         source=str(watchlist["source"]),
         default_daily_tickers=coverage_tickers,
         watchlist_tickers=tuple(watchlist["tickers"]),
-        daily_coverage_policy=DAILY_COVERAGE_POLICY,
         snapshot_loader=_saved_report_snapshot,
     )
     if not get_settings().get("halal_checker_enabled", True):
@@ -519,18 +511,20 @@ def load_report(ticker: str, report_id: str) -> dict[str, Any]:
 
 def get_daily_watchlist(force_refresh: bool = False) -> dict[str, Any]:
     watchlist = _resolve_screened_daily_watchlist(force_refresh=force_refresh)
+    raw_watchlist_tickers = tuple(watchlist.get("raw_tickers") or watchlist["tickers"])
     holdings = list(service_portfolio.portfolio_holdings_tickers(_portfolio_paths()))
-    coverage_tickers = _daily_coverage_tickers(tuple(watchlist["tickers"]))
+    coverage_tickers = _daily_coverage_tickers(raw_watchlist_tickers)
     metadata = {
         "fetched_at": watchlist.get("fetched_at"),
         "screenshots": list(watchlist.get("screenshots", [])),
         "error": watchlist.get("error"),
         "stale": bool(watchlist.get("stale", False)),
         "existing_holdings": holdings,
-        "raw_tickers": list(watchlist.get("raw_tickers", [])),
+        "raw_tickers": list(raw_watchlist_tickers),
+        "eligible_tickers": list(watchlist.get("eligible_tickers", watchlist["tickers"])),
         "screening": _daily_screening_display_payload(coverage_tickers),
     }
-    return service_daily.get_daily_watchlist(str(watchlist["source"]), tuple(watchlist["tickers"]), DAILY_COVERAGE_POLICY, metadata)
+    return service_daily.get_daily_watchlist(str(watchlist["source"]), raw_watchlist_tickers, metadata)
 
 
 def prepare_daily_run(trade_date: str, *, force_refresh_watchlist: bool = False) -> dict[str, Any]:
@@ -543,7 +537,6 @@ def prepare_daily_run(trade_date: str, *, force_refresh_watchlist: bool = False)
         source=str(watchlist["source"]),
         default_daily_tickers=coverage_tickers,
         watchlist_tickers=tuple(watchlist["tickers"]),
-        daily_coverage_policy=DAILY_COVERAGE_POLICY,
         manifest_loader=_load_daily_manifest,
         manifest_writer=_write_daily_manifest,
         snapshot_loader=_saved_report_snapshot,
@@ -674,7 +667,18 @@ def update_portfolio_state(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def sync_alpaca_paper_portfolio() -> dict[str, Any]:
-    snapshot = service_alpaca.get_account_snapshot()
+    snapshot = service_broker.get_broker("alpaca_paper").get_account_snapshot()
+    return update_portfolio_state(snapshot)
+
+
+def list_broker_options() -> list[dict[str, str]]:
+    return service_broker.list_broker_options()
+
+
+def sync_broker_portfolio(provider: str | None = None) -> dict[str, Any]:
+    broker_provider = provider or str(get_settings().get("broker_provider") or "")
+    broker = service_broker.get_broker(broker_provider)
+    snapshot = broker.get_account_snapshot()
     return update_portfolio_state(snapshot)
 
 
@@ -719,8 +723,12 @@ def execute_daily_rebalance_plan(
     *,
     total_equity: float | None = None,
     max_positions: int = service_portfolio.DEFAULT_TARGET_POSITION_COUNT,
+    broker: service_broker.PaperBroker | None = None,
+    broker_provider: str | None = None,
 ) -> dict[str, Any]:
-    current_portfolio = sync_alpaca_paper_portfolio()
+    resolved_provider = broker_provider or str(get_settings().get("broker_provider") or "")
+    resolved_broker = broker or service_broker.get_broker(resolved_provider)
+    current_portfolio = update_portfolio_state(resolved_broker.get_account_snapshot())
     plan = build_daily_rebalance_plan(
         trade_date,
         total_equity=total_equity or current_portfolio.get("total_equity"),
@@ -735,7 +743,7 @@ def execute_daily_rebalance_plan(
         result = {
             "execution_id": f"{trade_date}-no-orders",
             "trade_date": trade_date,
-            "broker": {"provider": "alpaca", "environment": "paper"},
+            "broker": {"provider": resolved_broker.provider, "environment": resolved_broker.environment},
             "submitted_orders": [],
             "submitted_order_count": 0,
             "submitted_at": datetime.utcnow().isoformat() + "Z",
@@ -745,7 +753,7 @@ def execute_daily_rebalance_plan(
         service_portfolio.write_execution_result(_portfolio_paths(), result)
         return result
 
-    execution = service_alpaca.submit_rebalance_orders(
+    execution = resolved_broker.submit_rebalance_orders(
         plan.get("order_intents", []),
         current_portfolio=plan.get("current_portfolio", {}),
         trade_date=trade_date,
@@ -774,6 +782,155 @@ def _set_daily_portfolio_execution(trade_date: str, payload: dict[str, Any]) -> 
     _write_daily_manifest(manifest)
 
 
+def _set_daily_notification_state(trade_date: str, phase: str, payload: dict[str, Any]) -> None:
+    manifest = _load_daily_manifest(trade_date)
+    notifications = manifest.get("notifications") if isinstance(manifest.get("notifications"), dict) else {}
+    notifications[phase] = {
+        **payload,
+        "updated_at": datetime.utcnow().isoformat() + "Z",
+    }
+    manifest["notifications"] = notifications
+    _write_daily_manifest(manifest)
+
+
+def _load_completed_ticker_reports(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    reports: list[dict[str, Any]] = []
+    reports_root = REPORTS_DIR.resolve()
+    for entry in manifest.get("tickers", []):
+        if entry.get("status") != "completed" or not entry.get("report_path"):
+            continue
+        candidate = (REPO_ROOT / str(entry["report_path"])).resolve()
+        if reports_root != candidate and reports_root not in candidate.parents:
+            continue
+        if not candidate.exists():
+            continue
+        if candidate.suffix.lower() == ".md":
+            try:
+                markdown = candidate.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            reports.append(
+                {
+                    "ticker": entry.get("ticker"),
+                    "title": candidate.stem.replace("_", " ").title(),
+                    "markdown": markdown,
+                    "path": str(candidate.relative_to(REPO_ROOT)),
+                }
+            )
+            continue
+        if candidate.suffix.lower() == ".json":
+            try:
+                loaded = load_report(str(entry.get("ticker")), str(entry.get("trade_date") or manifest.get("trade_date")))
+            except (FileNotFoundError, ValueError, OSError):
+                continue
+            for document in loaded.get("documents", []):
+                reports.append(
+                    {
+                        "ticker": entry.get("ticker"),
+                        "title": document.get("title"),
+                        "markdown": document.get("markdown"),
+                        "path": document.get("path"),
+                    }
+                )
+    return reports
+
+
+def generate_daily_html_report(trade_date: str, *, rebalance_plan: dict[str, Any] | None = None) -> dict[str, Any]:
+    manifest = get_daily_run(trade_date)
+    plan = rebalance_plan
+    if plan is None:
+        try:
+            plan = build_daily_rebalance_plan(trade_date)
+        except Exception as exc:
+            plan = {"ready": False, "error": str(exc), "order_intents": [], "ranking": []}
+    path = service_html_reports.write_daily_html_report(
+        trade_date=trade_date,
+        paths=_paths(),
+        manifest=manifest,
+        portfolio_state=get_portfolio_state(),
+        rebalance_plan=plan,
+        ticker_reports=_load_completed_ticker_reports(manifest),
+    )
+    relative_path = service_html_reports.repo_relative_path(_paths(), path)
+    return {
+        "trade_date": trade_date,
+        "path": relative_path,
+        "share_url": service_html_reports.share_url(_public_base_url(), relative_path),
+        "rebalance_plan_ready": bool(plan.get("ready")),
+        "proposed_trade_count": len(plan.get("order_intents", [])) if isinstance(plan.get("order_intents"), list) else 0,
+    }
+
+
+def _daily_notification_message(trade_date: str, report: dict[str, Any], manifest: dict[str, Any], plan: dict[str, Any] | None = None) -> str:
+    summary = manifest.get("summary") or {}
+    orders = plan.get("order_intents", []) if isinstance(plan, dict) and isinstance(plan.get("order_intents"), list) else []
+    portfolio = get_portfolio_state()
+    lines = [
+        f"TradingAgents daily update - {trade_date}",
+        f"Portfolio: total equity {_format_money(portfolio.get('total_equity'))}, cash {_format_money(portfolio.get('cash_notional'))}.",
+        f"Coverage: {summary.get('completed', 0)}/{summary.get('total', 0)} complete; {summary.get('queued', 0)} queued; {summary.get('running', 0)} running; {summary.get('failed', 0)} failed.",
+    ]
+    if orders:
+        lines.append("Proposed trades:")
+        for order in orders[:12]:
+            lines.append(
+                f"- {order.get('side', '').upper()} {order.get('ticker')}: "
+                f"{_format_money(order.get('delta_notional'))} delta, rating {order.get('rating')}; "
+                f"{_order_reason(order, plan)}"
+            )
+        if len(orders) > 12:
+            lines.append(f"- Plus {len(orders) - 12} more in the HTML report.")
+    else:
+        lines.append("Proposed trades: none yet. The plan is waiting on analysis, failed checks, or no rebalance is required.")
+    lines.append(f"HTML report: {report['share_url']}")
+    return "\n".join(lines)
+
+
+def _format_money(value: Any) -> str:
+    try:
+        return f"${float(value or 0):,.2f}"
+    except (TypeError, ValueError):
+        return "$0.00"
+
+
+def _order_reason(order: dict[str, Any], plan: dict[str, Any] | None) -> str:
+    if not isinstance(plan, dict):
+        return "see report reasoning"
+    for item in plan.get("ranking", []):
+        if item.get("ticker") == order.get("ticker"):
+            return str(item.get("action_reason") or "see report reasoning")
+    return "see report reasoning"
+
+
+def send_daily_notification(trade_date: str, *, phase: str = "morning", plan: dict[str, Any] | None = None) -> dict[str, Any]:
+    manifest = get_daily_run(trade_date)
+    existing = manifest.get("notifications") if isinstance(manifest.get("notifications"), dict) else {}
+    if isinstance(existing.get(phase), dict) and existing[phase].get("status") == "sent":
+        return existing[phase]
+    if plan is None:
+        try:
+            plan = build_daily_rebalance_plan(trade_date)
+        except Exception:
+            plan = None
+    report = generate_daily_html_report(trade_date, rebalance_plan=plan)
+    message = _daily_notification_message(trade_date, report, get_daily_run(trade_date), plan)
+    try:
+        result = service_notifications.send_telegram_message(message)
+    except Exception as exc:
+        result = {"status": "failed", "error": str(exc)}
+    if result.get("status") in {"sent", "failed"}:
+        _set_daily_notification_state(
+            trade_date,
+            phase,
+            {
+                **result,
+                "report_path": report["path"],
+                "share_url": report["share_url"],
+            },
+        )
+    return {**result, "report": report}
+
+
 def finalize_daily_coverage_portfolio(trade_date: str) -> dict[str, Any]:
     manifest = _load_daily_manifest(trade_date)
     existing = manifest.get("portfolio_execution") if isinstance(manifest.get("portfolio_execution"), dict) else None
@@ -797,6 +954,7 @@ def finalize_daily_coverage_portfolio(trade_date: str) -> dict[str, Any]:
         "submitted_at": execution.get("submitted_at"),
     }
     _set_daily_portfolio_execution(trade_date, payload)
+    send_daily_notification(trade_date, phase="final", plan=execution.get("plan"))
     return payload
 
 
@@ -830,6 +988,7 @@ def queue_daily_run_entries(
     )
     if not result.get("queued_jobs"):
         result["portfolio_execution"] = finalize_daily_coverage_portfolio(trade_date)
+    result["notification"] = send_daily_notification(trade_date, phase="morning")
     return result
 
 

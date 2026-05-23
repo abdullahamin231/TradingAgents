@@ -7,6 +7,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from webui import service
 
 
+def _stub_daily_watchlist(monkeypatch, tickers):
+    monkeypatch.setattr(
+        service,
+        "_resolve_daily_watchlist",
+        lambda force_refresh=False: {
+            "source": "seeking_alpha_cache",
+            "tickers": list(tickers),
+            "fetched_at": "2026-05-23T08:10:27Z",
+            "screenshots": [],
+            "error": None,
+            "stale": False,
+        },
+    )
+
+
 def test_build_opencode_config_uses_opencode_json(tmp_path, monkeypatch):
     opencode_path = tmp_path / "opencode.json"
     opencode_path.write_text(json.dumps({"model": "opencode/test-model"}), encoding="utf-8")
@@ -100,18 +115,27 @@ def test_get_provider_default_model_uses_openai_defaults_when_opencode_config_mi
     assert service.get_provider_default_model("opencode", "deep") == "openai/gpt-5.4"
 
 
-def test_execute_daily_rebalance_plan_syncs_alpaca_before_orders(tmp_path, monkeypatch):
+def test_settings_persist_broker_provider(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
+
+    updated = service.update_settings(
+        {
+            "halal_checker_enabled": False,
+            "daily_run_time": "10:15",
+            "broker_provider": "webull_paper",
+        }
+    )
+    loaded = service.get_settings()
+
+    assert updated["broker_provider"] == "webull_paper"
+    assert loaded["broker_provider"] == "webull_paper"
+    assert loaded["daily_run_time"] == "10:15"
+
+
+def test_execute_daily_rebalance_plan_syncs_injected_broker_before_orders(tmp_path, monkeypatch):
     monkeypatch.setattr(service, "REPORTS_DIR", tmp_path / "reports")
     monkeypatch.setattr(service.service_portfolio, "write_rebalance_plan", lambda paths, plan: plan)
     monkeypatch.setattr(service.service_portfolio, "write_execution_result", lambda paths, execution: execution)
-    monkeypatch.setattr(service, "sync_alpaca_paper_portfolio", lambda: {
-        "as_of": "2026-05-23",
-        "total_equity": 100000.0,
-        "cash_notional": 90000.0,
-        "positions": [
-            {"ticker": "OLD", "shares": 10, "current_notional": 10000.0, "current_weight": 0.1},
-        ],
-    })
     monkeypatch.setattr(service, "get_daily_run", lambda trade_date: {
         "trade_date": trade_date,
         "watchlist_tickers": ["NEW"],
@@ -124,20 +148,32 @@ def test_execute_daily_rebalance_plan_syncs_alpaca_before_orders(tmp_path, monke
 
     captured = {}
 
-    def submit_orders(order_intents, *, current_portfolio, trade_date):
-        captured["order_intents"] = order_intents
-        captured["current_portfolio"] = current_portfolio
-        return {
-            "execution_id": "exec-1",
-            "trade_date": trade_date,
-            "submitted_orders": [],
-            "submitted_order_count": len(order_intents),
-            "submitted_at": "2026-05-23T14:00:00Z",
-        }
+    class FakeBroker:
+        provider = "fake"
+        environment = "paper"
 
-    monkeypatch.setattr(service.service_alpaca, "submit_rebalance_orders", submit_orders)
+        def get_account_snapshot(self):
+            return {
+                "as_of": "2026-05-23",
+                "total_equity": 100000.0,
+                "cash_notional": 90000.0,
+                "positions": [
+                    {"ticker": "OLD", "shares": 10, "current_notional": 10000.0, "current_weight": 0.1},
+                ],
+            }
 
-    result = service.execute_daily_rebalance_plan("2026-05-23")
+        def submit_rebalance_orders(self, order_intents, *, current_portfolio, trade_date):
+            captured["order_intents"] = order_intents
+            captured["current_portfolio"] = current_portfolio
+            return {
+                "execution_id": "exec-1",
+                "trade_date": trade_date,
+                "submitted_orders": [],
+                "submitted_order_count": len(order_intents),
+                "submitted_at": "2026-05-23T14:00:00Z",
+            }
+
+    result = service.execute_daily_rebalance_plan("2026-05-23", broker=FakeBroker())
 
     assert result["submitted_order_count"] == 2
     assert captured["current_portfolio"]["positions"][0]["ticker"] == "OLD"
@@ -347,7 +383,7 @@ def test_prepare_daily_run_builds_manifest(tmp_path, monkeypatch):
     reports_dir = tmp_path / "reports"
     monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
-    monkeypatch.setattr(service, "DEFAULT_DAILY_TICKERS", ("SPY", "NVDA", "AAPL"))
+    _stub_daily_watchlist(monkeypatch, ("SPY", "NVDA", "AAPL"))
 
     manifest = service.prepare_daily_run("2026-05-09")
 
@@ -362,7 +398,7 @@ def test_queue_daily_run_only_queues_incomplete_entries(tmp_path, monkeypatch):
     reports_dir = tmp_path / "reports"
     monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
-    monkeypatch.setattr(service, "DEFAULT_DAILY_TICKERS", ("SPY", "NVDA"))
+    _stub_daily_watchlist(monkeypatch, ("SPY", "NVDA"))
 
     log_dir = reports_dir / "SPY" / "TradingAgentsStrategy_logs"
     log_dir.mkdir(parents=True)
@@ -441,7 +477,7 @@ def test_run_job_updates_daily_manifest_with_rating(tmp_path, monkeypatch):
     reports_dir = tmp_path / "reports"
     monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
-    monkeypatch.setattr(service, "DEFAULT_DAILY_TICKERS", ("SPY",))
+    _stub_daily_watchlist(monkeypatch, ("SPY",))
 
     class FakeGraph:
         def __init__(self, debug, config):
@@ -487,7 +523,7 @@ def test_queue_daily_run_recovers_concatenated_manifest(tmp_path, monkeypatch):
     reports_dir = tmp_path / "reports"
     monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
-    monkeypatch.setattr(service, "DEFAULT_DAILY_TICKERS", ("SPY", "NVDA"))
+    _stub_daily_watchlist(monkeypatch, ("SPY", "NVDA"))
 
     daily_dir = reports_dir / service.DAILY_RUNS_DIRNAME
     daily_dir.mkdir(parents=True)
@@ -495,8 +531,7 @@ def test_queue_daily_run_recovers_concatenated_manifest(tmp_path, monkeypatch):
         json.dumps(
             {
                 "trade_date": "2026-05-09",
-                "source": "hardcoded",
-                "policy": [],
+                "source": "seeking_alpha_cache",
                 "tickers": [],
                 "created_at": "2026-05-09T00:00:00Z",
                 "updated_at": "2026-05-09T00:00:00Z",
@@ -508,8 +543,7 @@ def test_queue_daily_run_recovers_concatenated_manifest(tmp_path, monkeypatch):
         + json.dumps(
             {
                 "trade_date": "2026-05-09",
-                "source": "hardcoded",
-                "policy": [],
+                "source": "seeking_alpha_cache",
                 "tickers": [],
                 "created_at": "2026-05-09T01:00:00Z",
                 "updated_at": "2026-05-09T01:00:00Z",

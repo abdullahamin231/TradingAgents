@@ -2,7 +2,6 @@ import {
   dailyDateInput,
   dailyMessage,
   dailyPortfolioExecution,
-  dailyPolicy,
   dailyPrepareButton,
   dailyRescrapeButton,
   dailyRunMissingButton,
@@ -126,7 +125,6 @@ function renderWatchlistDiff(diff = null) {
 
 export function renderDailyWatchlist(payload) {
   const tickers = uniqueTickers(payload.tickers || []);
-  const policy = payload.policy || [];
   const metadata = payload.metadata || {};
   const screening = metadata.screening || {};
   const displayScreening = shouldShowCompliance(screening) ? screening : {};
@@ -143,20 +141,6 @@ export function renderDailyWatchlist(payload) {
     : "No watchlist configured.";
   renderWatchlistHoldings({ ...metadata, screening: displayScreening }, tickers);
   renderWatchlistDiff(state.dailyWatchlistDiff);
-
-  dailyPolicy.className = policy.length ? "policy-list" : "policy-list empty-state";
-  dailyPolicy.innerHTML = policy.length
-    ? policy
-        .map(
-          (item) => `
-            <article class="policy-item">
-              <strong>${escapeHtml(item.rating)}</strong>
-              <p>${escapeHtml(item.action)}</p>
-            </article>
-          `
-        )
-        .join("")
-    : "No policy configured.";
   state.dailyWatchlistPayload = payload;
 }
 
@@ -266,11 +250,11 @@ function renderPortfolioExecution(execution = null) {
   const status = execution.status || "unknown";
   dailyPortfolioExecution.className = `portfolio-banner ${status === "failed" ? "portfolio-banner-pending" : "portfolio-banner-ready"}`;
   const detail = status === "submitted"
-    ? `Submitted ${execution.submitted_order_count || 0} Alpaca paper order${execution.submitted_order_count === 1 ? "" : "s"}.`
+    ? `Submitted ${execution.submitted_order_count || 0} broker paper order${execution.submitted_order_count === 1 ? "" : "s"}.`
     : status === "no_orders"
-      ? "No Alpaca paper orders were required."
+      ? "No broker paper orders were required."
       : status === "running"
-        ? "Syncing Alpaca and finalizing portfolio orders."
+        ? "Syncing broker and finalizing portfolio orders."
         : execution.error || execution.detail || "Waiting for daily coverage to finish.";
   dailyPortfolioExecution.innerHTML = `
     <strong>Portfolio: ${escapeHtml(status)}</strong>

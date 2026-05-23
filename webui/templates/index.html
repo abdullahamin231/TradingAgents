@@ -143,13 +143,6 @@
                 <div id="daily-watchlist-diff" class="watchlist-diff empty-state">Rescrape tickers to see additions and removals.</div>
               </section>
 
-              <section class="stack-section">
-                <div class="section-head">
-                  <h2>Policy</h2>
-                  <p>Paper-trading mapping.</p>
-                </div>
-                <div id="daily-policy" class="policy-list empty-state">Loading policy...</div>
-              </section>
             </section>
 
             <section class="viewer-pane">
@@ -214,7 +207,7 @@
             <section class="control-pane">
               <div class="pane-header">
                 <h1>Portfolio automation</h1>
-                <p>Daily coverage now drives execution: scrape Seeking Alpha, apply halal filtering, analyze the slate, sync Alpaca, then place the rule-based paper orders automatically.</p>
+                <p>Daily coverage now drives execution: scrape Seeking Alpha, apply halal filtering, analyze the slate, sync the selected broker, then place the rule-based paper orders automatically.</p>
               </div>
 
               <div class="field-grid">
@@ -232,7 +225,7 @@
               </div>
 
               <div class="action-row">
-                <button id="portfolio-sync-broker" type="button">Refresh Alpaca snapshot</button>
+                <button id="portfolio-sync-broker" type="button">Refresh broker snapshot</button>
                 <button id="portfolio-load-current" type="button">Reload saved snapshot</button>
                 <button id="portfolio-generate-plan" type="button">Preview current plan</button>
               </div>
@@ -240,7 +233,7 @@
 
               <section class="stack-section">
                 <div class="section-head">
-                  <h2>Alpaca book</h2>
+                  <h2>Broker book</h2>
                   <p id="portfolio-current-meta">No portfolio loaded.</p>
                 </div>
                 <div id="portfolio-current-summary" class="summary-strip empty-state">Load the current portfolio to inspect the live paper book.</div>
@@ -251,7 +244,7 @@
             <section class="viewer-pane">
               <div class="pane-header">
                 <h2>Execution plan</h2>
-                <p>Rule outcomes from daily coverage and the latest Alpaca position sync.</p>
+                <p>Rule outcomes from daily coverage and the latest broker position sync.</p>
               </div>
 
               <div id="portfolio-plan-meta" class="portfolio-banner empty-state">Daily coverage will generate and execute this plan automatically after analysis completes.</div>
@@ -342,6 +335,13 @@
                 <label class="field">
                   <span class="field-label">Daily run time (New York)</span>
                   <input id="settings-daily-run-time" type="time" value="09:30" />
+                </label>
+                <label class="field">
+                  <span class="field-label">Broker</span>
+                  <select id="settings-broker-provider">
+                    <option value="alpaca_paper">Alpaca Paper</option>
+                    <option value="webull_paper">Webull Paper</option>
+                  </select>
                 </label>
               </div>
 
