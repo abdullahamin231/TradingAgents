@@ -178,12 +178,6 @@ python scripts/bootstrap_seeking_alpha_auth.py --output /absolute/path/to/seekin
 export SEEKING_ALPHA_COOKIES_PATH=/absolute/path/to/seeking_alpha_cookies.json
 ```
 
-The code also supports Playwright `storageState`:
-
-```bash
-export SEEKING_ALPHA_STORAGE_STATE_PATH=/absolute/path/to/seeking_alpha_state.json
-```
-
 ## Environment Variables
 
 LLM providers:

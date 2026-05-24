@@ -915,7 +915,7 @@ def send_daily_notification(trade_date: str, *, phase: str = "morning", plan: di
     report = generate_daily_html_report(trade_date, rebalance_plan=plan)
     message = _daily_notification_message(trade_date, report, get_daily_run(trade_date), plan)
     try:
-        result = service_notifications.send_telegram_message(message)
+        result = service_notifications.send_discord_message(message)
     except Exception as exc:
         result = {"status": "failed", "error": str(exc)}
     if result.get("status") in {"sent", "failed"}:
