@@ -105,6 +105,30 @@ Provider/model flow:
 4. `build_run_config()` sets `llm_provider`, quick/deep models, report paths, data vendors, memory path, and Ollama backend URL when needed.
 5. Provider instantiation is routed through `tradingagents/llm_clients/factory.py`.
 
+OpenCode auth troubleshooting:
+
+- The WebUI runs OpenCode inside Docker Compose, not in the interactive host shell. If daily coverage fails with `opencode returned non-zero exit status 1`, reproduce inside the container first:
+
+```bash
+docker exec tradingagents-webui /opt/opencode/bin/opencode models openai
+docker exec tradingagents-webui /opt/opencode/bin/opencode run --format json --model openai/gpt-5.4-mini --pure 'Return {"final_answer":"ok"} as JSON only.'
+```
+
+- If the host shell is authenticated but the container says `Provider not found: openai` or `Model not found: openai/gpt-5.4-mini`, check that Compose mounts the host OpenCode auth file into the container path used by `XDG_DATA_HOME`:
+
+```yaml
+- /root/.local/share/opencode/auth.json:/home/appuser/app/.tradingagents/opencode-data/opencode/auth.json:ro
+```
+
+- After changing the mount, recreate only the WebUI container and verify from inside Docker:
+
+```bash
+docker compose up -d --force-recreate --no-deps webui
+docker exec tradingagents-webui /opt/opencode/bin/opencode models openai
+```
+
+- Do not print or commit OpenCode auth contents. Only commit the Compose mount and runbook updates.
+
 ## API Surface
 
 Main endpoints:

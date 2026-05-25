@@ -22,6 +22,7 @@ services:
       - /root/TradingAgents/.tradingagents:/home/appuser/app/.tradingagents
       - /root/.opencode:/opt/opencode:ro
       - /root/.config/opencode:/opt/opencode-config/opencode:ro
+      - /root/.local/share/opencode/auth.json:/home/appuser/app/.tradingagents/opencode-data/opencode/auth.json:ro
     ports:
       - "2026:2026"
     restart: unless-stopped
