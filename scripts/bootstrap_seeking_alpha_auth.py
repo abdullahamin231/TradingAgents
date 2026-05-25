@@ -203,7 +203,7 @@ def _require_selenium() -> None:
         )
 
 
-def _build_driver(args: argparse.Namespace) -> WebDriver:
+def _build_driver(args: argparse.Namespace, debug_dir: Path) -> WebDriver:
     assert Options is not None
     LOGGER.info("Starting Chrome via Selenium (headless=%s)", args.headless)
     if args.chrome_binary:
@@ -224,11 +224,21 @@ def _build_driver(args: argparse.Namespace) -> WebDriver:
     options.add_argument(f"--user-agent={SEEKING_ALPHA_USER_AGENT}")
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
+    options.add_argument("--remote-debugging-port=0")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
 
-    service = Service(executable_path=args.driver_path) if args.driver_path else Service()
+    debug_dir.mkdir(parents=True, exist_ok=True)
+    chromedriver_log = debug_dir / "chromedriver.log"
+    service = (
+        Service(executable_path=args.driver_path, service_args=["--verbose"], log_output=str(chromedriver_log))
+        if args.driver_path
+        else Service(service_args=["--verbose"], log_output=str(chromedriver_log))
+    )
+    LOGGER.info("ChromeDriver verbose log: %s", chromedriver_log)
     driver = webdriver.Chrome(service=service, options=options)
     driver.set_page_load_timeout(args.timeout)
     driver.execute_cdp_cmd(
@@ -554,7 +564,13 @@ def main() -> int:
     debug_dir.mkdir(parents=True, exist_ok=True)
     LOGGER.info("Debug screenshots directory: %s", debug_dir)
 
-    driver = _build_driver(args)
+    try:
+        driver = _build_driver(args, debug_dir)
+    except WebDriverException as exc:
+        LOGGER.error("Chrome failed to start: %s", exc)
+        LOGGER.error("Check ChromeDriver details in: %s", debug_dir / "chromedriver.log")
+        raise
+
     try:
         _login(
             driver,
