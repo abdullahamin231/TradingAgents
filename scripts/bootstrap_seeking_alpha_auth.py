@@ -219,11 +219,12 @@ def _wait_for_authenticated_state(page: Any, *, timeout: int) -> None:
         LOGGER.info("Network idle wait timed out; continuing to URL/auth checks")
         pass
 
+    url_wait_timeout = max(5000, min(timeout, 15000))
     try:
-        page.wait_for_url(lambda url: "/account/login" not in str(url).lower(), timeout=timeout)
+        page.wait_for_url(lambda url: "/account/login" not in str(url).lower(), timeout=url_wait_timeout)
         LOGGER.info("Login URL changed to: %s", page.url)
     except Exception:
-        LOGGER.info("Still on login URL or URL did not change before timeout; checking page body")
+        LOGGER.info("Login URL did not change within %s ms; checking page body before continuing", url_wait_timeout)
         body_text = ""
         try:
             body_text = page.locator("body").inner_text(timeout=3000).lower()
@@ -232,7 +233,7 @@ def _wait_for_authenticated_state(page: Any, *, timeout: int) -> None:
         if any(marker in body_text for marker in ("verification code", "two-factor", "2fa", "captcha")):
             raise RuntimeError("Seeking Alpha requires an interactive verification step; cookie bootstrap cannot continue headlessly.")
         if "/account/login" in page.url.lower():
-            raise RuntimeError("Seeking Alpha login did not complete before the timeout.")
+            LOGGER.info("Still on login URL after submit; continuing to screener validation")
 
 
 def _open_screener_if_authenticated(page: Any, *, timeout: int, debug_dir: Path) -> bool:
