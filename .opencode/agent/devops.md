@@ -178,33 +178,18 @@ python scripts/bootstrap_seeking_alpha_auth.py --output /absolute/path/to/seekin
 export SEEKING_ALPHA_COOKIES_PATH=/absolute/path/to/seeking_alpha_cookies.json
 ```
 
-Bootstrap failing:
+Seeking Alpha reauth request:
+
+- When the user asks to reauth Seeking Alpha, first check whether `SEEKING_ALPHA_EMAIL` and `SEEKING_ALPHA_PASSWORD` are set without printing their values.
+- If either variable is missing, ask the user to set the missing env var(s) and do not run the bootstrap yet.
+- If both variables are set, run:
 
 ```bash
-google-chrome --version || chromium --version
-chromedriver --version
-tail -200 debug/chromedriver.log
+python3 scripts/bootstrap_seeking_alpha_auth.py --output seeking_alpha_cookies.json
 ```
 
-If Chrome, Chromium, or chromedriver is missing on Ubuntu/Debian, install the browser and driver:
-
-```bash
-apt-get update
-apt-get install -y chromium chromium-driver
-```
-
-Then run the bootstrap with explicit paths:
-
-```bash
-python scripts/bootstrap_seeking_alpha_auth.py \
-  --output "$SEEKING_ALPHA_COOKIES_PATH" \
-  --chrome-binary /usr/bin/chromium \
-  --driver-path /usr/bin/chromedriver \
-  --debug-dir debug \
-  --log-level DEBUG
-```
-
-If Selenium raises `SessionNotCreatedException: Chrome instance exited`, first inspect `debug/chromedriver.log`. Common causes are missing Chrome shared libraries, a Chrome/chromedriver major-version mismatch, a wrong binary path, or a conflicting `--user-data-dir`.
+- After it succeeds, remind the user to use `SEEKING_ALPHA_COOKIES_PATH=/absolute/path/to/seeking_alpha_cookies.json` where the WebUI runs.
+- If it fails, inspect `webui_artifacts/seeking_alpha_auth_debug/` screenshots and HTML. Try `--no-headless` if the screenshots show a bot challenge.
 
 ## Environment Variables
 

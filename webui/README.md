@@ -122,7 +122,7 @@ export SEEKING_ALPHA_PASSWORD=your_password
 python scripts/bootstrap_seeking_alpha_auth.py --output /absolute/path/to/seeking_alpha_cookies.json
 ```
 
-That helper runs Selenium Chrome in headless mode by default, completes the Seeking Alpha login, opens the screener, and writes a reusable cookie secret file for server-side watchlist refreshes. The server needs Chrome or Chromium available. If Selenium cannot locate the browser or driver automatically, set `CHROME_BINARY` and `CHROMEDRIVER_PATH`, or pass `--chrome-binary` and `--driver-path`. Use `--no-headless` for local debugging.
+That helper runs CloakBrowser in headless mode by default with a persistent profile, completes the Seeking Alpha login, opens the screener, and writes a reusable cookie secret file for server-side watchlist refreshes. CloakBrowser downloads its patched Chromium binary on first launch. Screenshots are written to `webui_artifacts/seeking_alpha_auth_debug`; the profile is kept in `webui_artifacts/seeking_alpha_cloak_profile`. Use `--no-headless` for local debugging.
 
 ## Broker Configuration
 
