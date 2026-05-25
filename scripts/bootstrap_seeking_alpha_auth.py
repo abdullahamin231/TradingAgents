@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ except ImportError:  # pragma: no cover - exercised through runtime setup
 
 SEEKING_ALPHA_EMAIL_ENV = "SEEKING_ALPHA_EMAIL"
 SEEKING_ALPHA_PASSWORD_ENV = "SEEKING_ALPHA_PASSWORD"
+POST_LOGIN_SETTLE_SECONDS = 10
 LOGGER = logging.getLogger("bootstrap_seeking_alpha_auth")
 
 
@@ -233,6 +235,35 @@ def _wait_for_authenticated_state(page: Any, *, timeout: int) -> None:
             raise RuntimeError("Seeking Alpha login did not complete before the timeout.")
 
 
+def _open_screener_if_authenticated(page: Any, *, timeout: int, debug_dir: Path) -> bool:
+    LOGGER.info("Opening screener: %s", SEEKING_ALPHA_SCREEN_URL)
+    page.goto(SEEKING_ALPHA_SCREEN_URL, wait_until="domcontentloaded", timeout=timeout)
+    LOGGER.info("Screener page loaded: %s", page.url)
+    _save_screenshot(page, debug_dir, "screener-loaded")
+    _click_if_visible(page, ('button:has-text("Accept")', 'button:has-text("I agree")', '[data-testid*="accept" i]'))
+
+    if _looks_like_login_or_bot_gate(page):
+        LOGGER.info("Screener is not available from the current browser profile")
+        _save_screenshot(page, debug_dir, "login-or-bot-gate")
+        _save_page_html(page, debug_dir, "login-or-bot-gate")
+        return False
+
+    LOGGER.info("Waiting for screener content")
+    try:
+        _wait_for_screener_content(page, timeout_ms=timeout)
+    except RuntimeError:
+        if _looks_like_login_or_bot_gate(page):
+            LOGGER.info("Seeking Alpha redirected away from the screener while waiting for content")
+            _save_screenshot(page, debug_dir, "login-or-bot-gate")
+            _save_page_html(page, debug_dir, "login-or-bot-gate")
+            return False
+        raise
+
+    LOGGER.info("Screener content is visible")
+    _save_screenshot(page, debug_dir, "screener-content-visible")
+    return True
+
+
 def _save_cookie_secret(*, output_path: Path, context: Any) -> None:
     LOGGER.info("Collecting cookies from browser context")
     cookie_map = {cookie["name"]: cookie["value"] for cookie in context.cookies() if cookie.get("name") and cookie.get("value")}
@@ -259,10 +290,6 @@ def _save_cookie_secret(*, output_path: Path, context: Any) -> None:
 def main() -> int:
     logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=logging.INFO)
     args = parse_args()
-    if not args.email:
-        raise SystemExit(f"Set {SEEKING_ALPHA_EMAIL_ENV} or pass --email.")
-    if not args.password:
-        raise SystemExit(f"Set {SEEKING_ALPHA_PASSWORD_ENV} or pass --password.")
 
     output_path = resolve_cookies_path(args.output)
     if output_path is None:
@@ -278,25 +305,29 @@ def main() -> int:
     try:
         context = _launch_context(profile_dir=profile_dir, headless=not args.no_headless)
         page = context.new_page()
-        LOGGER.info("Opening login page: %s", SEEKING_ALPHA_LOGIN_URL)
-        page.goto(SEEKING_ALPHA_LOGIN_URL, wait_until="domcontentloaded", timeout=args.timeout)
-        LOGGER.info("Login page loaded: %s", page.url)
-        _save_screenshot(page, debug_dir, "login-loaded")
-        _click_if_visible(page, ('button:has-text("Accept")', 'button:has-text("I agree")', '[data-testid*="accept" i]'))
-        _submit_login(page, email=args.email, password=args.password, timeout=args.timeout, debug_dir=debug_dir)
-        _save_screenshot(page, debug_dir, "login-submitted")
-        _wait_for_authenticated_state(page, timeout=args.timeout)
-        LOGGER.info("Opening screener: %s", SEEKING_ALPHA_SCREEN_URL)
-        page.goto(SEEKING_ALPHA_SCREEN_URL, wait_until="domcontentloaded", timeout=args.timeout)
-        LOGGER.info("Screener page loaded: %s", page.url)
-        _save_screenshot(page, debug_dir, "screener-loaded")
-        LOGGER.info("Waiting for screener content")
-        _wait_for_screener_content(page, timeout_ms=args.timeout)
-        LOGGER.info("Screener content is visible")
-        _save_screenshot(page, debug_dir, "screener-content-visible")
+
+        if not _open_screener_if_authenticated(page, timeout=args.timeout, debug_dir=debug_dir):
+            if not args.email:
+                raise SystemExit(f"Set {SEEKING_ALPHA_EMAIL_ENV} or pass --email.")
+            if not args.password:
+                raise SystemExit(f"Set {SEEKING_ALPHA_PASSWORD_ENV} or pass --password.")
+
+            LOGGER.info("Opening login page: %s", SEEKING_ALPHA_LOGIN_URL)
+            page.goto(SEEKING_ALPHA_LOGIN_URL, wait_until="domcontentloaded", timeout=args.timeout)
+            LOGGER.info("Login page loaded: %s", page.url)
+            _save_screenshot(page, debug_dir, "login-loaded")
+            _click_if_visible(page, ('button:has-text("Accept")', 'button:has-text("I agree")', '[data-testid*="accept" i]'))
+            _submit_login(page, email=args.email, password=args.password, timeout=args.timeout, debug_dir=debug_dir)
+            _save_screenshot(page, debug_dir, "login-submitted")
+            LOGGER.info("Waiting %s seconds after login submit for session setup", POST_LOGIN_SETTLE_SECONDS)
+            time.sleep(POST_LOGIN_SETTLE_SECONDS)
+            _wait_for_authenticated_state(page, timeout=args.timeout)
+            if not _open_screener_if_authenticated(page, timeout=args.timeout, debug_dir=debug_dir):
+                _save_screenshot(page, debug_dir, "login-or-bot-gate")
+                _save_page_html(page, debug_dir, "login-or-bot-gate")
+                raise RuntimeError("Seeking Alpha redirected to login or bot verification instead of the screener.")
+
         if _looks_like_login_or_bot_gate(page):
-            _save_screenshot(page, debug_dir, "login-or-bot-gate")
-            _save_page_html(page, debug_dir, "login-or-bot-gate")
             raise RuntimeError("Seeking Alpha redirected to login or bot verification instead of the screener.")
         _save_cookie_secret(output_path=output_path, context=context)
     finally:
