@@ -178,6 +178,34 @@ python scripts/bootstrap_seeking_alpha_auth.py --output /absolute/path/to/seekin
 export SEEKING_ALPHA_COOKIES_PATH=/absolute/path/to/seeking_alpha_cookies.json
 ```
 
+Bootstrap failing:
+
+```bash
+google-chrome --version || chromium --version
+chromedriver --version
+tail -200 debug/chromedriver.log
+```
+
+If Chrome, Chromium, or chromedriver is missing on Ubuntu/Debian, install the browser and driver:
+
+```bash
+apt-get update
+apt-get install -y chromium chromium-driver
+```
+
+Then run the bootstrap with explicit paths:
+
+```bash
+python scripts/bootstrap_seeking_alpha_auth.py \
+  --output "$SEEKING_ALPHA_COOKIES_PATH" \
+  --chrome-binary /usr/bin/chromium \
+  --driver-path /usr/bin/chromedriver \
+  --debug-dir debug \
+  --log-level DEBUG
+```
+
+If Selenium raises `SessionNotCreatedException: Chrome instance exited`, first inspect `debug/chromedriver.log`. Common causes are missing Chrome shared libraries, a Chrome/chromedriver major-version mismatch, a wrong binary path, or a conflicting `--user-data-dir`.
+
 ## Environment Variables
 
 LLM providers:
