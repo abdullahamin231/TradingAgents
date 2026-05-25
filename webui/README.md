@@ -117,10 +117,12 @@ export SEEKING_ALPHA_COOKIES_PATH=/absolute/path/to/seeking_alpha_cookies.json
 Bootstrap that file once with:
 
 ```bash
+export SEEKING_ALPHA_EMAIL=you@example.com
+export SEEKING_ALPHA_PASSWORD=your_password
 python scripts/bootstrap_seeking_alpha_auth.py --output /absolute/path/to/seeking_alpha_cookies.json
 ```
 
-That helper opens a real browser, lets you log in manually, and writes a reusable cookie secret file for server-side watchlist refreshes.
+That helper runs Selenium Chrome in headless mode by default, completes the Seeking Alpha login, opens the screener, and writes a reusable cookie secret file for server-side watchlist refreshes. The server needs Chrome or Chromium available. If Selenium cannot locate the browser or driver automatically, set `CHROME_BINARY` and `CHROMEDRIVER_PATH`, or pass `--chrome-binary` and `--driver-path`. Use `--no-headless` for local debugging.
 
 ## Broker Configuration
 
