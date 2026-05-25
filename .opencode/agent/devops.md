@@ -174,6 +174,13 @@ curl -s http://127.0.0.1:2026/api/token-usage
 Seeking Alpha auth bootstrap:
 
 ```bash
+python3 -m pip install cloakbrowser
+sudo apt-get update
+sudo apt-get install -y \
+  libatk1.0-0 libatk-bridge2.0-0 libcups2 libnss3 libnspr4 \
+  libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgtk-3-0 \
+  libasound2 libxss1 libxshmfence1 libgbm1 libdrm2 libexpat1 \
+  libxcb1 libx11-6 libx11-xcb1
 python scripts/bootstrap_seeking_alpha_auth.py --output /absolute/path/to/seeking_alpha_cookies.json
 export SEEKING_ALPHA_COOKIES_PATH=/absolute/path/to/seeking_alpha_cookies.json
 ```
@@ -185,11 +192,19 @@ Seeking Alpha reauth request:
 - If both variables are set, run:
 
 ```bash
+python3 -m pip install cloakbrowser
+sudo apt-get update
+sudo apt-get install -y \
+  libatk1.0-0 libatk-bridge2.0-0 libcups2 libnss3 libnspr4 \
+  libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgtk-3-0 \
+  libasound2 libxss1 libxshmfence1 libgbm1 libdrm2 libexpat1 \
+  libxcb1 libx11-6 libx11-xcb1
 python3 scripts/bootstrap_seeking_alpha_auth.py --output seeking_alpha_cookies.json
 ```
 
 - After it succeeds, remind the user to use `SEEKING_ALPHA_COOKIES_PATH=/absolute/path/to/seeking_alpha_cookies.json` where the WebUI runs.
 - If it fails, inspect `webui_artifacts/seeking_alpha_auth_debug/` screenshots and HTML. Try `--no-headless` if the screenshots show a bot challenge.
+- If Chromium fails to start with a missing shared library, install the runtime deps above first; that is a host-level prerequisite, not a script bug.
 
 ## Environment Variables
 
