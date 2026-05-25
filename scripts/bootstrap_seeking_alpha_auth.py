@@ -264,6 +264,20 @@ def _open_screener_if_authenticated(page: Any, *, timeout: int, debug_dir: Path)
     return True
 
 
+def _open_login_or_detect_existing_session(page: Any, *, timeout: int, debug_dir: Path) -> bool:
+    LOGGER.info("Opening login page: %s", SEEKING_ALPHA_LOGIN_URL)
+    page.goto(SEEKING_ALPHA_LOGIN_URL, wait_until="domcontentloaded", timeout=timeout)
+    LOGGER.info("Login page loaded: %s", page.url)
+    _save_screenshot(page, debug_dir, "login-loaded")
+    _click_if_visible(page, ('button:has-text("Accept")', 'button:has-text("I agree")', '[data-testid*="accept" i]'))
+
+    current_url = page.url.lower()
+    if "/account/login" not in current_url:
+        LOGGER.info("Login page redirected to %s; existing Seeking Alpha session is active", page.url)
+        return True
+    return False
+
+
 def _save_cookie_secret(*, output_path: Path, context: Any) -> None:
     LOGGER.info("Collecting cookies from browser context")
     cookie_map = {cookie["name"]: cookie["value"] for cookie in context.cookies() if cookie.get("name") and cookie.get("value")}
@@ -306,26 +320,23 @@ def main() -> int:
         context = _launch_context(profile_dir=profile_dir, headless=not args.no_headless)
         page = context.new_page()
 
-        if not _open_screener_if_authenticated(page, timeout=args.timeout, debug_dir=debug_dir):
+        is_authenticated = _open_login_or_detect_existing_session(page, timeout=args.timeout, debug_dir=debug_dir)
+        if not is_authenticated:
             if not args.email:
                 raise SystemExit(f"Set {SEEKING_ALPHA_EMAIL_ENV} or pass --email.")
             if not args.password:
                 raise SystemExit(f"Set {SEEKING_ALPHA_PASSWORD_ENV} or pass --password.")
 
-            LOGGER.info("Opening login page: %s", SEEKING_ALPHA_LOGIN_URL)
-            page.goto(SEEKING_ALPHA_LOGIN_URL, wait_until="domcontentloaded", timeout=args.timeout)
-            LOGGER.info("Login page loaded: %s", page.url)
-            _save_screenshot(page, debug_dir, "login-loaded")
-            _click_if_visible(page, ('button:has-text("Accept")', 'button:has-text("I agree")', '[data-testid*="accept" i]'))
             _submit_login(page, email=args.email, password=args.password, timeout=args.timeout, debug_dir=debug_dir)
             _save_screenshot(page, debug_dir, "login-submitted")
             LOGGER.info("Waiting %s seconds after login submit for session setup", POST_LOGIN_SETTLE_SECONDS)
             time.sleep(POST_LOGIN_SETTLE_SECONDS)
             _wait_for_authenticated_state(page, timeout=args.timeout)
-            if not _open_screener_if_authenticated(page, timeout=args.timeout, debug_dir=debug_dir):
-                _save_screenshot(page, debug_dir, "login-or-bot-gate")
-                _save_page_html(page, debug_dir, "login-or-bot-gate")
-                raise RuntimeError("Seeking Alpha redirected to login or bot verification instead of the screener.")
+
+        if not _open_screener_if_authenticated(page, timeout=args.timeout, debug_dir=debug_dir):
+            _save_screenshot(page, debug_dir, "login-or-bot-gate")
+            _save_page_html(page, debug_dir, "login-or-bot-gate")
+            raise RuntimeError("Seeking Alpha redirected to login or bot verification instead of the screener.")
 
         if _looks_like_login_or_bot_gate(page):
             raise RuntimeError("Seeking Alpha redirected to login or bot verification instead of the screener.")
