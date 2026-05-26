@@ -519,10 +519,77 @@ def test_run_job_updates_daily_manifest_with_rating(tmp_path, monkeypatch):
     assert entry["report_path"].endswith("complete_report.md")
 
 
+def test_daily_report_and_notification_wait_for_all_tickers(tmp_path, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
+    monkeypatch.setattr(service, "_screen_daily_tickers", lambda tickers: {"enabled": False, "tickers": list(tickers), "results": []})
+    monkeypatch.setattr(service, "_cached_daily_screening", lambda tickers: {"enabled": False, "tickers": list(tickers), "results": []})
+    _stub_daily_watchlist(monkeypatch, ("SPY", "NVDA"))
+
+    service.prepare_daily_run("2026-05-09")
+    service._update_daily_run_job_state(
+        "2026-05-09",
+        "SPY",
+        status="completed",
+        rating="Buy",
+        report_path="reports/SPY/SavedReports/2026-05-09_job12345/complete_report.md",
+    )
+
+    def fail_report_write(*args, **kwargs):
+        raise AssertionError("daily HTML report should not be generated before every ticker completes")
+
+    def fail_notification_send(*args, **kwargs):
+        raise AssertionError("daily notification should not be sent before every ticker completes")
+
+    monkeypatch.setattr(service.service_html_reports, "write_daily_html_report", fail_report_write)
+    monkeypatch.setattr(service.service_notifications, "send_discord_message", fail_notification_send)
+
+    try:
+        service.generate_daily_html_report("2026-05-09")
+    except ValueError as exc:
+        assert "NVDA" in str(exc)
+    else:
+        raise AssertionError("generate_daily_html_report should wait for all tickers")
+
+    try:
+        service.send_daily_notification("2026-05-09", phase="final")
+    except ValueError as exc:
+        assert "NVDA" in str(exc)
+    else:
+        raise AssertionError("send_daily_notification should wait for all tickers")
+
+
+def test_daily_finalization_waits_on_failed_tickers(tmp_path, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
+    monkeypatch.setattr(service, "_screen_daily_tickers", lambda tickers: {"enabled": False, "tickers": list(tickers), "results": []})
+    monkeypatch.setattr(service, "_cached_daily_screening", lambda tickers: {"enabled": False, "tickers": list(tickers), "results": []})
+    _stub_daily_watchlist(monkeypatch, ("SPY", "NVDA"))
+
+    service.prepare_daily_run("2026-05-09")
+    service._update_daily_run_job_state("2026-05-09", "SPY", status="completed", rating="Buy", report_path="reports/SPY.md")
+    service._update_daily_run_job_state("2026-05-09", "NVDA", status="failed", error="model error")
+
+    def fail_execution(*args, **kwargs):
+        raise AssertionError("portfolio finalization should not run while a ticker is failed")
+
+    monkeypatch.setattr(service, "execute_daily_rebalance_plan", fail_execution)
+
+    result = service.finalize_daily_coverage_portfolio("2026-05-09")
+
+    assert result["status"] == "waiting"
+    assert "NVDA" in result["detail"]
+
+
 def test_queue_daily_run_recovers_concatenated_manifest(tmp_path, monkeypatch):
     reports_dir = tmp_path / "reports"
     monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
+    monkeypatch.setattr(service, "_saved_report_snapshot", lambda ticker, trade_date: None)
+    monkeypatch.setattr(service, "_screen_daily_tickers", lambda tickers: {"enabled": False, "tickers": list(tickers), "results": []})
+    monkeypatch.setattr(service, "_cached_daily_screening", lambda tickers: {"enabled": False, "tickers": list(tickers), "results": []})
     _stub_daily_watchlist(monkeypatch, ("SPY", "NVDA"))
 
     daily_dir = reports_dir / service.DAILY_RUNS_DIRNAME

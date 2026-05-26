@@ -763,14 +763,35 @@ def execute_daily_rebalance_plan(
     return result
 
 
-def _daily_manifest_has_open_work(manifest: dict[str, Any]) -> bool:
+def _daily_manifest_incomplete_entries(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    incomplete: list[dict[str, Any]] = []
     for entry in manifest.get("tickers", []):
         compliance = entry.get("shariah_compliance") or {}
         if service_daily.is_blocking_compliance(compliance):
             continue
-        if entry.get("status") in {"pending", "queued", "running"}:
-            return True
-    return False
+        if entry.get("status") != "completed":
+            incomplete.append(entry)
+    return incomplete
+
+
+def _daily_manifest_has_open_work(manifest: dict[str, Any]) -> bool:
+    return bool(_daily_manifest_incomplete_entries(manifest))
+
+
+def _daily_manifest_completion_error(manifest: dict[str, Any]) -> str | None:
+    incomplete = _daily_manifest_incomplete_entries(manifest)
+    if not incomplete:
+        return None
+    waiting_on = ", ".join(str(entry.get("ticker")) for entry in incomplete[:12])
+    if len(incomplete) > 12:
+        waiting_on = f"{waiting_on}, plus {len(incomplete) - 12} more"
+    return f"Daily coverage is not complete. Waiting on: {waiting_on}."
+
+
+def _require_daily_coverage_complete(manifest: dict[str, Any]) -> None:
+    error = _daily_manifest_completion_error(manifest)
+    if error is not None:
+        raise ValueError(error)
 
 
 def _set_daily_portfolio_execution(trade_date: str, payload: dict[str, Any]) -> None:
@@ -837,6 +858,7 @@ def _load_completed_ticker_reports(manifest: dict[str, Any]) -> list[dict[str, A
 
 def generate_daily_html_report(trade_date: str, *, rebalance_plan: dict[str, Any] | None = None) -> dict[str, Any]:
     manifest = get_daily_run(trade_date)
+    _require_daily_coverage_complete(manifest)
     plan = rebalance_plan
     if plan is None:
         try:
@@ -905,6 +927,7 @@ def _order_reason(order: dict[str, Any], plan: dict[str, Any] | None) -> str:
 def send_daily_notification(trade_date: str, *, phase: str = "morning", plan: dict[str, Any] | None = None) -> dict[str, Any]:
     manifest = get_daily_run(trade_date)
     existing = manifest.get("notifications") if isinstance(manifest.get("notifications"), dict) else {}
+    _require_daily_coverage_complete(manifest)
     if isinstance(existing.get(phase), dict) and existing[phase].get("status") == "sent":
         return existing[phase]
     if plan is None:
@@ -936,8 +959,9 @@ def finalize_daily_coverage_portfolio(trade_date: str) -> dict[str, Any]:
     existing = manifest.get("portfolio_execution") if isinstance(manifest.get("portfolio_execution"), dict) else None
     if existing and existing.get("status") in {"submitted", "no_orders", "running"}:
         return existing
-    if _daily_manifest_has_open_work(manifest):
-        return {"status": "waiting", "detail": "Daily coverage is still running."}
+    completion_error = _daily_manifest_completion_error(manifest)
+    if completion_error is not None:
+        return {"status": "waiting", "detail": completion_error}
 
     _set_daily_portfolio_execution(trade_date, {"status": "running"})
     try:
@@ -988,7 +1012,11 @@ def queue_daily_run_entries(
     )
     if not result.get("queued_jobs"):
         result["portfolio_execution"] = finalize_daily_coverage_portfolio(trade_date)
-    result["notification"] = send_daily_notification(trade_date, phase="morning")
+    notifications = get_daily_run(trade_date).get("notifications") or {}
+    result["notification"] = notifications.get(
+        "final",
+        {"status": "waiting", "detail": "Daily notification will be sent after every daily coverage ticker completes."},
+    )
     return result
 
 
