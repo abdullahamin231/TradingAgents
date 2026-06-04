@@ -23,9 +23,9 @@ RATING_TO_SCORE = {
 }
 RATING_TO_WEIGHT_MULTIPLIER = {
     "Buy": 1.0,
-    "Overweight": 0.9,
+    "Overweight": 1.1,
     "Hold": 1.0,
-    "Underweight": 1.1,
+    "Underweight": 0.9,
     "Sell": 0.0,
 }
 
@@ -292,11 +292,11 @@ def build_rebalance_plan(
                 action_reason = "sell existing holding because analysis is Sell"
                 sell_all = True
             elif item["rating"] == "Overweight":
-                target_notional = _round_money(current_notional * 0.9)
-                action_reason = "reduce existing exposure by 10% because analysis is Overweight"
+                target_notional = _round_money(current_notional * item["target_multiplier"])
+                action_reason = "increase existing exposure by 10% because analysis is Overweight"
             elif item["rating"] == "Underweight":
-                target_notional = _round_money(current_notional * 1.1)
-                action_reason = "increase existing exposure by 10% because analysis is Underweight"
+                target_notional = _round_money(current_notional * item["target_multiplier"])
+                action_reason = "reduce existing exposure by 10% because analysis is Underweight"
             else:
                 target_notional = current_notional
                 action_reason = f"keep existing holding because analysis is {item['rating']}"

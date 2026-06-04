@@ -64,14 +64,14 @@ def test_rebalance_plan_applies_existing_holding_rating_rules():
     entries = [
         _entry("BUYHELD", "Buy"),
         _entry("HOLDME", "Hold"),
-        _entry("TRIM", "Overweight"),
-        _entry("ADD", "Underweight"),
+        _entry("ADD", "Overweight"),
+        _entry("TRIM", "Underweight"),
     ]
     positions = [
         {"ticker": "BUYHELD", "shares": 10, "current_notional": 1000.0, "current_weight": 0.01},
         {"ticker": "HOLDME", "shares": 10, "current_notional": 2000.0, "current_weight": 0.02},
-        {"ticker": "TRIM", "shares": 10, "current_notional": 3000.0, "current_weight": 0.03},
-        {"ticker": "ADD", "shares": 10, "current_notional": 4000.0, "current_weight": 0.04},
+        {"ticker": "ADD", "shares": 10, "current_notional": 3000.0, "current_weight": 0.03},
+        {"ticker": "TRIM", "shares": 10, "current_notional": 4000.0, "current_weight": 0.04},
     ]
 
     plan = _plan(entries, positions, ["BUYHELD", "HOLDME", "TRIM", "ADD"])
@@ -80,12 +80,12 @@ def test_rebalance_plan_applies_existing_holding_rating_rules():
 
     assert ranking["BUYHELD"]["rebalance_action"] == "hold"
     assert ranking["HOLDME"]["rebalance_action"] == "hold"
-    assert ranking["TRIM"]["target_notional"] == 2700.0
+    assert ranking["ADD"]["target_notional"] == 3300.0
+    assert orders["ADD"]["side"] == "buy"
+    assert orders["ADD"]["delta_notional"] == 300.0
+    assert ranking["TRIM"]["target_notional"] == 3600.0
     assert orders["TRIM"]["side"] == "sell"
     assert orders["TRIM"]["estimated_sell_qty"] == 1
-    assert ranking["ADD"]["target_notional"] == 4400.0
-    assert orders["ADD"]["side"] == "buy"
-    assert orders["ADD"]["delta_notional"] == 400.0
 
 
 def test_rebalance_plan_treats_non_held_selected_non_sell_as_buy():
