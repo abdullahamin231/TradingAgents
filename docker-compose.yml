@@ -1,7 +1,8 @@
+name: tradingagents
+
 services:
   webui:
     build: .
-    container_name: tradingagents-webui
     user: root
     entrypoint: []
     command: ["uvicorn", "webui.app:app", "--host", "0.0.0.0", "--port", "2026"]
@@ -29,13 +30,11 @@ services:
 
   webui-watchtower:
     image: docker:27-cli
-    container_name: tradingagents-webui-watchtower
     working_dir: /workspace
     environment:
       WATCH_BRANCH: main
       WATCH_INTERVAL_SECONDS: 900 # 15 minutes
       WEBUI_SERVICE: webui
-      WEBUI_CONTAINER: tradingagents-webui
       GIT_SSH_COMMAND: ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/tmp/known_hosts
     volumes:
       - /root/TradingAgents:/workspace
@@ -58,9 +57,17 @@ services:
 
               if [ "$$local_commit" != "$$remote_commit" ]; then
                 # Recreate the service so updated code, dependencies, and compose
-                # settings all take effect; fall back to a restart if compose is unavailable.
+                # settings all take effect; fall back to restarting the current
+                # Compose-managed container if recreation fails.
                 if git pull --ff-only origin "$$WATCH_BRANCH"; then
-                  docker compose up -d --build --force-recreate --no-deps "$$WEBUI_SERVICE" || docker restart "$$WEBUI_CONTAINER"
+                  if ! docker compose up -d --build --force-recreate --no-deps "$$WEBUI_SERVICE"; then
+                    webui_container="$$(docker compose ps -q "$$WEBUI_SERVICE" 2>/dev/null || true)"
+                    if [ -n "$$webui_container" ]; then
+                      docker restart "$$webui_container"
+                    else
+                      echo "Unable to recreate or locate $$WEBUI_SERVICE container"
+                    fi
+                  fi
                 fi
               fi
             else
