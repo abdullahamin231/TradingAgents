@@ -1,4 +1,3 @@
-import subprocess
 from unittest.mock import patch
 
 import pytest
@@ -26,17 +25,12 @@ def _sample_tool(ticker: str, days: int = 7) -> str:
 
 @pytest.mark.unit
 class TestOpenCodeClient:
-    @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
+    @patch("tradingagents.llm_clients.opencode_client.OpenCodeClient._run_binary_with_pty")
     def test_invoke_returns_ai_message(self, mock_run):
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=["binary", "run", "prompt"],
-            returncode=0,
-            stdout=(
-                '{"type":"step_start","timestamp":1778507973646,"sessionID":"ses_123","part":{"snapshot":"snap1"}}\n'
-                '{"type":"text","timestamp":1778507976660,"sessionID":"ses_123","part":{"text":"binary output"}}\n'
-                '{"type":"step_finish","timestamp":1778507976713,"sessionID":"ses_123","part":{"reason":"stop","messageID":"msg1","snapshot":"snap1","tokens":{"total":8869,"input":123,"output":8,"reasoning":34,"cache":{"write":0,"read":8704}},"cost":0}}\n'
-            ),
-            stderr="",
+        mock_run.return_value = (
+            '{"type":"step_start","timestamp":1778507973646,"sessionID":"ses_123","part":{"snapshot":"snap1"}}\n'
+            '{"type":"text","timestamp":1778507976660,"sessionID":"ses_123","part":{"text":"binary output"}}\n'
+            '{"type":"step_finish","timestamp":1778507976713,"sessionID":"ses_123","part":{"reason":"stop","messageID":"msg1","snapshot":"snap1","tokens":{"total":8869,"input":123,"output":8,"reasoning":34,"cache":{"write":0,"read":8704}},"cost":0}}\n'
         )
 
         client = OpenCodeClient("any-model")
@@ -47,14 +41,9 @@ class TestOpenCodeClient:
         assert result.additional_kwargs["opencode_usage"]["tokens"]["total"] == 8869
         assert mock_run.call_args.args[0] == ["opencode", "run", "--format", "json", "--model", "any-model", "--pure", "Prompt text"]
 
-    @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
+    @patch("tradingagents.llm_clients.opencode_client.OpenCodeClient._run_binary_with_pty")
     def test_with_structured_output_parses_json(self, mock_run):
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=["binary", "run", "prompt"],
-            returncode=0,
-            stdout='```json\n{"action":"buy","confidence":92}\n```\n',
-            stderr="",
-        )
+        mock_run.return_value = '```json\n{"action":"buy","confidence":92}\n```\n'
 
         client = OpenCodeClient("any-model")
         runnable = client.with_structured_output(_OpenCodeResponse)
@@ -65,14 +54,9 @@ class TestOpenCodeClient:
         assert "Return a trade decision" in opencode_prompt
         assert '"title": "_OpenCodeResponse"' in opencode_prompt
 
-    @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
+    @patch("tradingagents.llm_clients.opencode_client.OpenCodeClient._run_binary_with_pty")
     def test_with_structured_output_raises_on_parse_failure(self, mock_run):
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=["binary", "run", "prompt"],
-            returncode=0,
-            stdout="not json at all",
-            stderr="",
-        )
+        mock_run.return_value = "not json at all"
 
         client = OpenCodeClient("any-model")
         runnable = client.with_structured_output(_OpenCodeResponse)
@@ -80,14 +64,9 @@ class TestOpenCodeClient:
         with pytest.raises(ValueError):
             runnable.invoke("Return a trade decision")
 
-    @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
+    @patch("tradingagents.llm_clients.opencode_client.OpenCodeClient._run_binary_with_pty")
     def test_bind_tools_is_chain_compatible(self, mock_run):
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=["binary", "run", "prompt"],
-            returncode=0,
-            stdout='{"final_answer":"plain report"}',
-            stderr="",
-        )
+        mock_run.return_value = '{"final_answer":"plain report"}'
 
         client = OpenCodeClient("any-model")
         prompt = ChatPromptTemplate.from_messages(
@@ -109,14 +88,9 @@ class TestOpenCodeClient:
         assert '"name": "_sample_tool"' in opencode_prompt
         assert '"final_answer"' in opencode_prompt
 
-    @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
+    @patch("tradingagents.llm_clients.opencode_client.OpenCodeClient._run_binary_with_pty")
     def test_bind_tools_returns_tool_calls(self, mock_run):
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=["binary", "run", "prompt"],
-            returncode=0,
-            stdout='{"tool_calls":[{"name":"_sample_tool","args":{"ticker":"AAPL","days":5}}]}',
-            stderr="",
-        )
+        mock_run.return_value = '{"tool_calls":[{"name":"_sample_tool","args":{"ticker":"AAPL","days":5}}]}'
 
         client = OpenCodeClient("any-model")
         result = client.bind_tools([_sample_tool]).invoke("Analyze AAPL")
@@ -129,14 +103,9 @@ class TestOpenCodeClient:
         assert result.tool_calls[0]["type"] == "tool_call"
         assert result.tool_calls[0]["id"].startswith("call_")
 
-    @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
+    @patch("tradingagents.llm_clients.opencode_client.OpenCodeClient._run_binary_with_pty")
     def test_bind_tools_falls_back_to_plain_text_when_json_missing(self, mock_run):
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=["binary", "run", "prompt"],
-            returncode=0,
-            stdout="plain report without json",
-            stderr="",
-        )
+        mock_run.return_value = "plain report without json"
 
         client = OpenCodeClient("any-model")
         result = client.bind_tools([_sample_tool]).invoke("Analyze AAPL")
@@ -145,14 +114,9 @@ class TestOpenCodeClient:
         assert result.content == "plain report without json"
         assert result.tool_calls == []
 
-    @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
+    @patch("tradingagents.llm_clients.opencode_client.OpenCodeClient._run_binary_with_pty")
     def test_invoke_serializes_message_lists(self, mock_run):
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=["binary", "run", "prompt"],
-            returncode=0,
-            stdout='{"type":"text","part":{"text":"ok"}}\n{"type":"step_finish","part":{"tokens":{"total":1,"input":1,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"cost":0}}',
-            stderr="",
-        )
+        mock_run.return_value = '{"type":"text","part":{"text":"ok"}}\n{"type":"step_finish","part":{"tokens":{"total":1,"input":1,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"cost":0}}'
 
         client = OpenCodeClient("any-model")
         client.invoke(
@@ -167,17 +131,12 @@ class TestOpenCodeClient:
         assert "HUMAN:" in opencode_prompt
         assert "Summarize NVDA." in opencode_prompt
 
-    @patch("tradingagents.llm_clients.opencode_client.subprocess.run")
+    @patch("tradingagents.llm_clients.opencode_client.OpenCodeClient._run_binary_with_pty")
     def test_usage_callback_receives_usage_payload(self, mock_run):
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=["binary", "run", "prompt"],
-            returncode=0,
-            stdout=(
-                '{"type":"step_start","timestamp":1000,"sessionID":"ses_123","part":{"snapshot":"snap1"}}\n'
-                '{"type":"text","timestamp":1500,"sessionID":"ses_123","part":{"text":"Hello."}}\n'
-                '{"type":"step_finish","timestamp":2000,"sessionID":"ses_123","part":{"reason":"stop","messageID":"msg1","snapshot":"snap1","tokens":{"total":20,"input":5,"output":3,"reasoning":2,"cache":{"write":1,"read":9}},"cost":0.25}}\n'
-            ),
-            stderr="",
+        mock_run.return_value = (
+            '{"type":"step_start","timestamp":1000,"sessionID":"ses_123","part":{"snapshot":"snap1"}}\n'
+            '{"type":"text","timestamp":1500,"sessionID":"ses_123","part":{"text":"Hello."}}\n'
+            '{"type":"step_finish","timestamp":2000,"sessionID":"ses_123","part":{"reason":"stop","messageID":"msg1","snapshot":"snap1","tokens":{"total":20,"input":5,"output":3,"reasoning":2,"cache":{"write":1,"read":9}},"cost":0.25}}\n'
         )
         seen = []
 
@@ -188,6 +147,35 @@ class TestOpenCodeClient:
         assert seen[0]["time"] == {"start": 1000, "end": 2000}
         assert seen[0]["tokens"]["cache"] == {"read": 9, "write": 1}
         assert seen[0]["cost"] == 0.25
+
+    def test_invoke_retries_once_when_opencode_execution_fails(self):
+        client = OpenCodeClient("any-model")
+
+        with patch.object(
+            client,
+            "_run_binary_with_pty",
+            side_effect=[
+                OSError("argument list is too large"),
+                '{"type":"text","part":{"text":"retry output"}}',
+            ],
+        ) as mock_run:
+            result = client.invoke("Prompt text")
+
+        assert result.content == "retry output"
+        assert mock_run.call_count == 2
+
+    def test_invoke_raises_when_opencode_retry_fails(self):
+        client = OpenCodeClient("any-model")
+
+        with patch.object(
+            client,
+            "_run_binary_with_pty",
+            side_effect=OSError("argument list is too large"),
+        ) as mock_run:
+            with pytest.raises(OSError, match="argument list is too large"):
+                client.invoke("Prompt text")
+
+        assert mock_run.call_count == 2
 
 
 @pytest.mark.unit

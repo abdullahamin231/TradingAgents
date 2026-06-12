@@ -242,8 +242,23 @@ class OpenCodeClient(BaseLLMClient):
             cwd_path = Path(self.working_dir)
             cwd_path.mkdir(parents=True, exist_ok=True)
             cwd = str(cwd_path)
-        stdout = self._run_binary_with_pty(command, cwd=cwd)
+        stdout = self._run_binary_with_retry(command, cwd=cwd)
         return self._parse_run_output(stdout)
+
+    def _run_binary_with_retry(
+        self,
+        command: list[str],
+        *,
+        cwd: str | None = None,
+    ) -> str:
+        for attempt in range(2):
+            try:
+                return self._run_binary_with_pty(command, cwd=cwd)
+            except (OSError, subprocess.CalledProcessError):
+                if attempt == 1:
+                    raise
+
+        raise RuntimeError("unreachable opencode retry state")
 
     def _run_binary_with_pty(
         self,
@@ -255,19 +270,19 @@ class OpenCodeClient(BaseLLMClient):
         output_chunks: list[bytes] = []
 
         try:
-            process = subprocess.Popen(
-                command,
-                stdin=slave_fd,
-                stdout=slave_fd,
-                stderr=slave_fd,
-                cwd=cwd,
-                start_new_session=True,
-                close_fds=True,
-            )
-        finally:
-            os.close(slave_fd)
+            try:
+                process = subprocess.Popen(
+                    command,
+                    stdin=slave_fd,
+                    stdout=slave_fd,
+                    stderr=slave_fd,
+                    cwd=cwd,
+                    start_new_session=True,
+                    close_fds=True,
+                )
+            finally:
+                os.close(slave_fd)
 
-        try:
             while True:
                 ready, _, _ = select.select([master_fd], [], [], 0.1)
                 if master_fd in ready:
