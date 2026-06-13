@@ -700,20 +700,23 @@ def build_daily_rebalance_plan(
         _load_daily_manifest,
     )
     previous_watchlist = tuple(previous_manifest.get("watchlist_tickers", [])) if previous_manifest else ()
+    portfolio_paths = _portfolio_paths()
+    previous_rebalance_plan = service_portfolio.latest_previous_rebalance_plan(portfolio_paths, trade_date)
     plan = service_portfolio.build_rebalance_plan(
         trade_date=trade_date,
         manifest=manifest,
         portfolio_state=portfolio_state or get_portfolio_state(),
         watchlist_tickers=watchlist_tickers,
         previous_watchlist_tickers=previous_watchlist,
+        previous_rebalance_plan=previous_rebalance_plan,
         total_equity=total_equity,
         max_positions=max_positions,
     )
-    service_portfolio.write_rebalance_plan(_portfolio_paths(), plan)
+    service_portfolio.write_rebalance_plan(portfolio_paths, plan)
     if apply_targets:
         if not plan["ready"]:
             raise ValueError("Daily rebalance plan is not ready because required analysis is still pending.")
-        updated_state = service_portfolio.apply_rebalance_plan(_portfolio_paths(), plan)
+        updated_state = service_portfolio.apply_rebalance_plan(portfolio_paths, plan)
         plan = {**plan, "applied": True, "target_portfolio": updated_state}
     return plan
 

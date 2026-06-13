@@ -22,10 +22,10 @@ RATING_TO_SCORE = {
     "Sell": 1,
 }
 RATING_TO_WEIGHT_MULTIPLIER = {
-    "Buy": 1.0,
-    "Overweight": 1.1,
+    "Buy": 1.25,
+    "Overweight": 1.25,
     "Hold": 1.0,
-    "Underweight": 0.9,
+    "Underweight": 0.75,
     "Sell": 0.0,
 }
 
@@ -191,6 +191,57 @@ def latest_previous_manifest(trade_date: str, manifests_dir: Path, manifest_load
     return manifest_loader(candidates[-1])
 
 
+def latest_previous_rebalance_plan(paths: PortfolioPaths, trade_date: str) -> dict[str, Any] | None:
+    if not paths.executions_dir.exists():
+        return None
+    candidates = sorted(
+        path
+        for path in paths.executions_dir.glob("*.json")
+        if path.stem[:10] < trade_date
+    )
+    for path in reversed(candidates):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        status = payload.get("status")
+        submitted_without_status = status is None and "submitted_order_count" in payload and payload.get("submitted_at")
+        if status not in {"submitted", "no_orders"} and not submitted_without_status:
+            continue
+        plan = payload.get("plan")
+        if isinstance(plan, dict) and plan.get("ready") is True:
+            return plan
+    return None
+
+
+def _allocation_signature_from_rows(rows: list[dict[str, Any]], selected_tickers: set[str]) -> dict[str, tuple[str, float, float]]:
+    signature: dict[str, tuple[str, float, float]] = {}
+    for item in rows:
+        ticker = item.get("ticker")
+        if ticker not in selected_tickers:
+            continue
+        rating = parse_rating(str(item.get("rating") or "Hold"))
+        multiplier = round(float(item.get("target_multiplier", RATING_TO_WEIGHT_MULTIPLIER.get(rating, 0.0)) or 0.0), 6)
+        target_weight = round(float(item.get("target_weight", 0.0) or 0.0), 6)
+        signature[str(ticker)] = (rating, multiplier, target_weight)
+    return signature
+
+
+def _allocation_signature_from_plan(plan: dict[str, Any] | None) -> dict[str, tuple[str, float, float]] | None:
+    if not isinstance(plan, dict):
+        return None
+    selected_tickers = set(_normalize_tickers(list(plan.get("selected_tickers") or ())))
+    if not selected_tickers:
+        return None
+    ranking = [item for item in plan.get("ranking", []) if isinstance(item, dict)]
+    signature = _allocation_signature_from_rows(ranking, selected_tickers)
+    if set(signature) != selected_tickers:
+        return None
+    return signature
+
+
 def build_rebalance_plan(
     *,
     trade_date: str,
@@ -198,6 +249,7 @@ def build_rebalance_plan(
     portfolio_state: dict[str, Any],
     watchlist_tickers: tuple[str, ...],
     previous_watchlist_tickers: tuple[str, ...] = (),
+    previous_rebalance_plan: dict[str, Any] | None = None,
     total_equity: float | None = None,
     max_positions: int = DEFAULT_TARGET_POSITION_COUNT,
     rating_multipliers: dict[str, float] | None = None,
@@ -256,7 +308,6 @@ def build_rebalance_plan(
         key=lambda item: (
             -item["score"],
             -item["target_multiplier"],
-            not item["is_existing_holding"],
             item["ticker"],
         )
     )
@@ -265,16 +316,35 @@ def build_rebalance_plan(
     selected = [
         item
         for item in ranked_candidates
-        if item["ticker"] in normalized_watchlist and item["rating"] != "Sell" and not item["shariah_blocked"]
+        if item["rating"] != "Sell" and not item["shariah_blocked"] and item["target_multiplier"] > 0.0
     ][:max_positions]
     selected_tickers = {item["ticker"] for item in selected}
-    equal_target_notional = _round_money(total_value / max_positions) if max_positions > 0 else 0.0
+    selected_multiplier_sum = sum(item["target_multiplier"] for item in selected)
+    selected_weights = {
+        item["ticker"]: (item["target_multiplier"] / selected_multiplier_sum if selected_multiplier_sum > 0.0 else 0.0)
+        for item in selected
+    }
 
     target_positions: list[dict[str, Any]] = []
     for ticker in _normalize_tickers([*normalized_watchlist, *existing_holdings]):
         item = ranked_by_ticker.get(ticker)
         if item is None:
-            continue
+            position = current_positions.get(ticker)
+            if position is None:
+                continue
+            item = {
+                "ticker": ticker,
+                "rating": parse_rating(str(position.get("last_rating", "Hold"))),
+                "score": 0,
+                "report_path": None,
+                "status": completed_entries.get(ticker, {}).get("status") or "pending",
+                "is_existing_holding": True,
+                "is_new_watchlist_addition": ticker in new_watchlist_additions,
+                "current_weight": float(position.get("current_weight", 0.0) or 0.0),
+                "current_notional": _round_money(float(position.get("current_notional", 0.0) or 0.0)),
+                "target_multiplier": 0.0,
+                "shariah_blocked": ticker in blocked_tickers,
+            }
         current_notional = item["current_notional"]
         current_shares = current_positions.get(ticker, {}).get("shares")
         action_reason = "not selected"
@@ -282,29 +352,19 @@ def build_rebalance_plan(
         skipped = False
         sell_all = False
 
-        if item["shariah_blocked"]:
-            target_notional = current_notional
-            action_reason = "blocked by halal screening"
-            skipped = True
-        elif item["is_existing_holding"]:
-            if item["rating"] == "Sell":
-                target_notional = 0.0
-                action_reason = "sell existing holding because analysis is Sell"
-                sell_all = True
-            elif item["rating"] == "Overweight":
-                target_notional = _round_money(current_notional * item["target_multiplier"])
-                action_reason = "increase existing exposure by 10% because analysis is Overweight"
-            elif item["rating"] == "Underweight":
-                target_notional = _round_money(current_notional * item["target_multiplier"])
-                action_reason = "reduce existing exposure by 10% because analysis is Underweight"
-            else:
-                target_notional = current_notional
-                action_reason = f"keep existing holding because analysis is {item['rating']}"
-        elif selected_for_target:
-            target_notional = equal_target_notional
-            action_reason = f"open top-{max_positions} selected name; non-held {item['rating']} is treated as Buy"
+        if selected_for_target:
+            target_notional = _round_money(total_value * selected_weights[ticker])
+            action_reason = f"target static top-{max_positions} allocation from {item['rating']} rating"
         else:
             target_notional = 0.0
+            if item["is_existing_holding"]:
+                sell_all = True
+                if item["shariah_blocked"]:
+                    action_reason = "sell existing holding because it is blocked by halal screening"
+                elif item["status"] != "completed":
+                    action_reason = "sell existing holding because analysis is pending and it is outside the selected allocation"
+                else:
+                    action_reason = f"sell existing holding because it is outside the selected top-{max_positions}"
 
         target_weight = target_notional / total_value if total_value > 0 else 0.0
         target_notional = _round_money(total_value * target_weight)
@@ -330,6 +390,16 @@ def build_rebalance_plan(
                 "action_reason": action_reason,
             }
         )
+
+    current_signature = _allocation_signature_from_rows(target_positions, selected_tickers)
+    previous_signature = _allocation_signature_from_plan(previous_rebalance_plan)
+    allocation_unchanged = previous_signature is not None and current_signature == previous_signature
+    if allocation_unchanged:
+        for item in target_positions:
+            if item["selected_for_target_portfolio"]:
+                item["rebalance_action"] = "hold"
+                item["estimated_sell_qty"] = None
+                item["action_reason"] = "allocation unchanged from previous completed plan; drift rebalance disabled"
 
     order_intents = [
         {
@@ -380,7 +450,7 @@ def build_rebalance_plan(
 
     return {
         "trade_date": trade_date,
-        "ready": not pending_analysis,
+        "ready": len(selected_tickers) == max_positions,
         "max_positions": max_positions,
         "total_equity": total_value,
         "watchlist_tickers": normalized_watchlist,
@@ -388,6 +458,7 @@ def build_rebalance_plan(
         "new_watchlist_additions": new_watchlist_additions,
         "dropped_watchlist_tickers": dropped_watchlist_tickers,
         "pending_analysis": pending_analysis,
+        "insufficient_eligible_tickers": max(max_positions - len(selected_tickers), 0),
         "analysis_coverage": {
             "required": len(required_universe),
             "completed": len(required_universe) - len(pending_analysis),
@@ -401,7 +472,9 @@ def build_rebalance_plan(
         "assumptions": {
             "ranking_order": ["Buy", "Overweight", "Hold", "Underweight", "Sell"],
             "rating_weight_multipliers": multipliers,
-            "execution_mode": "daily_top_10_with_existing_holding_rules",
+            "execution_mode": "static_top_10_rating_weighted",
+            "drift_rebalance": False,
+            "allocation_unchanged_from_previous_completed_plan": allocation_unchanged,
             "broker_ready": True,
         },
         "generated_at": _utcnow(),

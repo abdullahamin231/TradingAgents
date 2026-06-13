@@ -136,12 +136,16 @@ def test_execute_daily_rebalance_plan_syncs_injected_broker_before_orders(tmp_pa
     monkeypatch.setattr(service, "REPORTS_DIR", tmp_path / "reports")
     monkeypatch.setattr(service.service_portfolio, "write_rebalance_plan", lambda paths, plan: plan)
     monkeypatch.setattr(service.service_portfolio, "write_execution_result", lambda paths, execution: execution)
+    monkeypatch.setattr(service.service_portfolio, "latest_previous_rebalance_plan", lambda paths, trade_date: None)
     monkeypatch.setattr(service, "get_daily_run", lambda trade_date: {
         "trade_date": trade_date,
-        "watchlist_tickers": ["NEW"],
+        "watchlist_tickers": [f"NEW{i:02d}" for i in range(1, 11)],
         "screening": {"enabled": False},
         "tickers": [
-            {"ticker": "NEW", "status": "completed", "rating": "Buy", "report_path": "reports/NEW.md"},
+            *[
+                {"ticker": f"NEW{i:02d}", "status": "completed", "rating": "Buy", "report_path": f"reports/NEW{i:02d}.md"}
+                for i in range(1, 11)
+            ],
             {"ticker": "OLD", "status": "completed", "rating": "Sell", "report_path": "reports/OLD.md"},
         ],
     })
@@ -175,12 +179,12 @@ def test_execute_daily_rebalance_plan_syncs_injected_broker_before_orders(tmp_pa
 
     result = service.execute_daily_rebalance_plan("2026-05-23", broker=FakeBroker())
 
-    assert result["submitted_order_count"] == 2
+    assert result["submitted_order_count"] == 11
     assert captured["current_portfolio"]["positions"][0]["ticker"] == "OLD"
     orders = {order["ticker"]: order for order in captured["order_intents"]}
     assert orders["OLD"]["side"] == "sell"
     assert orders["OLD"]["estimated_sell_qty"] == 10
-    assert orders["NEW"]["side"] == "buy"
+    assert orders["NEW01"]["side"] == "buy"
 
 
 def test_list_llm_providers_includes_opencode_and_google():
