@@ -209,6 +209,8 @@ python scripts/bootstrap_seeking_alpha_auth.py --output /absolute/path/to/seekin
 export SEEKING_ALPHA_COOKIES_PATH=/absolute/path/to/seeking_alpha_cookies.json
 ```
 
+If the script exits with the error `Seeking Alpha requires an emailed security code. Set SEEKING_ALPHA_SECURITY_CODE or pass --security-code.`. Use the `.codex/skills/agentmail/SKILL.md` to get the security code. The `AGENTMAIL_API_KEY` environment variable is already set. Fetch the inbox and use the MOST recent security code and rerun the bootstrap script.
+
 Seeking Alpha reauth request:
 
 - When the user asks to reauth Seeking Alpha, first check whether `SEEKING_ALPHA_EMAIL` and `SEEKING_ALPHA_PASSWORD` are set without printing their values.
