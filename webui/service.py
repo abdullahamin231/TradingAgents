@@ -51,8 +51,14 @@ _halal_screening_refresh_state: dict[str, Any] = {
     "results": [],
     "error": None,
 }
-OPENCODE_DEFAULT_QUICK_MODEL = "openai/gpt-5.4-mini"
-OPENCODE_DEFAULT_DEEP_MODEL = "openai/gpt-5.4"
+OPENCODE_DEFAULT_QUICK_MODEL = "opencode/deepseek-v4-flash-free"
+OPENCODE_DEFAULT_DEEP_MODEL = "opencode/deepseek-v4-flash-free"
+OPENCODE_FALLBACK_MODELS = (
+    "opencode/big-pickle",
+    "opencode/mimo-v2.5-free",
+    "opencode/nemotron-3-ultra-free",
+    "opencode/north-mini-code-free",
+)
 WORKFLOW_ON_DEMAND = "analysis_on_demand"
 WORKFLOW_DAILY_COVERAGE = "daily_coverage"
 PROVIDER_OPTIONS = [
@@ -326,6 +332,18 @@ def resolve_run_models(provider: str, quick_model: str | None = None, deep_model
     return resolved_quick_model, resolved_deep_model
 
 
+def _opencode_model_attempts(quick_model: str, deep_model: str) -> list[tuple[str, str]]:
+    attempts = [(quick_model, deep_model)]
+    seen = set(attempts)
+    for model in OPENCODE_FALLBACK_MODELS:
+        attempt = (model, model)
+        if attempt in seen:
+            continue
+        attempts.append(attempt)
+        seen.add(attempt)
+    return attempts
+
+
 def build_run_config(provider: str, quick_model: str | None = None, deep_model: str | None = None) -> dict[str, Any]:
     _ensure_reports_layout()
     config = copy.deepcopy(DEFAULT_CONFIG)
@@ -458,14 +476,32 @@ class TradingJobManager:
             job.started_at = datetime.utcnow().isoformat() + "Z"
         _update_daily_run_job_state(job.trade_date, job.ticker, status="running" if job.workflow == WORKFLOW_DAILY_COVERAGE else None, job_id=job.job_id if job.workflow == WORKFLOW_DAILY_COVERAGE else None, started_at=job.started_at if job.workflow == WORKFLOW_DAILY_COVERAGE else None)
 
+        model_attempts = _opencode_model_attempts(job.quick_model, job.deep_model) if job.provider == "opencode" else [(job.quick_model, job.deep_model)]
+        attempt_errors: list[str] = []
         try:
-            config = build_run_config(job.provider, job.quick_model, job.deep_model)
-            usage_collector = None
-            if job.provider == "opencode":
-                usage_collector = TokenUsageCollector(job_id=job.job_id, ticker=job.ticker, trade_date=job.trade_date, workflow=job.workflow, provider=job.provider, quick_model=job.quick_model, deep_model=job.deep_model)
-                config["_opencode_usage_callback"] = usage_collector.record
-            graph = TradingAgentsGraph(debug=False, config=config)
-            final_state, decision = graph.propagate(job.ticker, job.trade_date)
+            for attempt_index, (quick_model, deep_model) in enumerate(model_attempts):
+                usage_collector = None
+                try:
+                    with self._lock:
+                        job.quick_model = quick_model
+                        job.deep_model = deep_model
+                    config = build_run_config(job.provider, quick_model, deep_model)
+                    if job.provider == "opencode":
+                        usage_collector = TokenUsageCollector(job_id=job.job_id, ticker=job.ticker, trade_date=job.trade_date, workflow=job.workflow, provider=job.provider, quick_model=quick_model, deep_model=deep_model)
+                        config["_opencode_usage_callback"] = usage_collector.record
+                    graph = TradingAgentsGraph(debug=False, config=config)
+                    final_state, decision = graph.propagate(job.ticker, job.trade_date)
+                    break
+                except Exception as attempt_exc:
+                    usage_summary = usage_collector.snapshot() if usage_collector is not None else None
+                    if usage_summary is not None:
+                        with self._lock:
+                            job.usage_summary = usage_summary["summary"]
+                            job.usage_events = usage_summary["events"]
+                    attempt_errors.append(f"{quick_model}/{deep_model}: {attempt_exc}")
+                    if attempt_index == len(model_attempts) - 1:
+                        raise RuntimeError("All OpenCode model attempts failed: " + " | ".join(attempt_errors)) from attempt_exc
+
             export_dir = REPORTS_DIR / job.ticker / "SavedReports" / f"{job.trade_date}_{job.job_id[:8]}"
             complete_report_path = save_complete_report(final_state, job.ticker, export_dir)
             usage_payload = usage_collector.snapshot() if usage_collector is not None else None

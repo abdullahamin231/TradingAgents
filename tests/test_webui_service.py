@@ -108,11 +108,11 @@ def test_resolve_run_models_falls_back_to_provider_defaults(tmp_path, monkeypatc
     assert deep_model == "opencode/deep-default"
 
 
-def test_get_provider_default_model_uses_openai_defaults_when_opencode_config_missing(tmp_path, monkeypatch):
+def test_get_provider_default_model_uses_opencode_defaults_when_opencode_config_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(service, "OPENCODE_CONFIG_PATH", tmp_path / "missing-opencode.json")
 
-    assert service.get_provider_default_model("opencode", "quick") == "openai/gpt-5.4-mini"
-    assert service.get_provider_default_model("opencode", "deep") == "openai/gpt-5.4"
+    assert service.get_provider_default_model("opencode", "quick") == "opencode/deepseek-v4-flash-free"
+    assert service.get_provider_default_model("opencode", "deep") == "opencode/deepseek-v4-flash-free"
 
 
 def test_settings_persist_broker_provider(tmp_path, monkeypatch):
@@ -313,7 +313,7 @@ def test_run_job_saves_complete_report(tmp_path, monkeypatch):
             usage_callback(
                 {
                     "provider": "opencode",
-                    "model": "openai/gpt-5.4-mini",
+                    "model": "opencode/deepseek-v4-flash-free",
                     "cost": 0.5,
                     "tokens": {
                         "total": 100,
@@ -381,6 +381,55 @@ def test_run_job_saves_complete_report(tmp_path, monkeypatch):
     assert usage_path.exists()
     usage_payload = json.loads(usage_path.read_text(encoding="utf-8"))
     assert usage_payload["summary"]["tokens_total"] == 100
+
+
+def test_run_job_retries_opencode_fallback_models(tmp_path, monkeypatch):
+    reports_dir = tmp_path / "reports"
+    monkeypatch.setattr(service, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(service, "REPORTS_DIR", reports_dir)
+    monkeypatch.setattr(service, "OPENCODE_FALLBACK_MODELS", ("opencode/big-pickle",))
+
+    attempts = []
+
+    class FakeGraph:
+        def __init__(self, debug, config):
+            self.config = config
+
+        def propagate(self, ticker, trade_date):
+            attempts.append((self.config["quick_think_llm"], self.config["deep_think_llm"]))
+            if self.config["deep_think_llm"] == "opencode/deepseek-v4-flash-free":
+                raise RuntimeError("usage limit")
+            return {
+                "company_of_interest": ticker,
+                "trade_date": trade_date,
+                "market_report": "# Market\n\nDetails",
+                "news_report": "# News\n\nContext",
+                "final_trade_decision": "Rating: Hold",
+            }, "Rating: Hold"
+
+    monkeypatch.setattr(service, "TradingAgentsGraph", FakeGraph)
+
+    manager = service.TradingJobManager(max_workers=1)
+    job = service.JobState(
+        job_id="jobfallback",
+        ticker="SPY",
+        trade_date="2026-05-05",
+        provider="opencode",
+        quick_model="opencode/deepseek-v4-flash-free",
+        deep_model="opencode/deepseek-v4-flash-free",
+    )
+    manager._jobs[job.job_id] = job
+    manager._order.insert(0, job.job_id)
+
+    manager._run_job(job.job_id)
+
+    assert attempts == [
+        ("opencode/deepseek-v4-flash-free", "opencode/deepseek-v4-flash-free"),
+        ("opencode/big-pickle", "opencode/big-pickle"),
+    ]
+    assert job.status == "completed"
+    assert job.quick_model == "opencode/big-pickle"
+    assert job.deep_model == "opencode/big-pickle"
 
 
 def test_prepare_daily_run_builds_manifest(tmp_path, monkeypatch):
@@ -657,12 +706,12 @@ def test_get_token_usage_combines_saved_reports_and_live_jobs(tmp_path, monkeypa
                 "trade_date": "2026-05-05",
                 "workflow": service.WORKFLOW_DAILY_COVERAGE,
                 "provider": "opencode",
-                "quick_model": "openai/gpt-5.4-mini",
-                "deep_model": "openai/gpt-5.4",
+                "quick_model": "opencode/deepseek-v4-flash-free",
+                "deep_model": "opencode/deepseek-v4-flash-free",
                 "events": [
                     {
                         "provider": "opencode",
-                        "model": "openai/gpt-5.4",
+                        "model": "opencode/deepseek-v4-flash-free",
                         "tokens": {"total": 50, "input": 20, "output": 10, "reasoning": 5, "cache": {"read": 12, "write": 3}},
                         "time": {"start": 1000, "end": 2000},
                         "cost": 0.1,
@@ -679,8 +728,8 @@ def test_get_token_usage_combines_saved_reports_and_live_jobs(tmp_path, monkeypa
         ticker="NVDA",
         trade_date="2026-05-06",
         provider="opencode",
-        quick_model="openai/gpt-5.4-mini",
-        deep_model="openai/gpt-5.4",
+        quick_model="opencode/deepseek-v4-flash-free",
+        deep_model="opencode/deepseek-v4-flash-free",
         status="running",
         usage_summary={
             "call_count": 1,
@@ -700,7 +749,7 @@ def test_get_token_usage_combines_saved_reports_and_live_jobs(tmp_path, monkeypa
         usage_events=[
             {
                 "provider": "opencode",
-                "model": "openai/gpt-5.4-mini",
+                "model": "opencode/deepseek-v4-flash-free",
                 "tokens_total": 30,
                 "tokens_input": 12,
                 "tokens_output": 8,
