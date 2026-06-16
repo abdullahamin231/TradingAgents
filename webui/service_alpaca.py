@@ -162,9 +162,11 @@ def submit_rebalance_orders(
 
         estimated_sell_qty = intent.get("estimated_sell_qty")
         if side == "sell" and isinstance(estimated_sell_qty, (int, float)) and estimated_sell_qty > 0:
-            payload["qty"] = round(float(estimated_sell_qty), 6)
+            qty = float(estimated_sell_qty)
+            payload["qty"] = int(qty * 1e6) / 1e6
         elif side == "sell" and isinstance(shares, (int, float)) and shares > 0 and current_notional > 0:
-            payload["qty"] = round(min(float(shares), float(shares) * delta_notional / current_notional), 6)
+            qty = min(float(shares), float(shares) * delta_notional / current_notional)
+            payload["qty"] = int(qty * 1e6) / 1e6
         else:
             payload["notional"] = _round_money(delta_notional)
 

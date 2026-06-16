@@ -102,10 +102,11 @@ def _estimate_sell_qty(
     if not isinstance(current_shares, (int, float)) or current_shares <= 0:
         return None
     if sell_all:
-        return round(float(current_shares), 6)
+        return int(float(current_shares) * 1e6) / 1e6
     if current_notional <= 0:
         return None
-    return round(min(float(current_shares), float(current_shares) * sell_notional / current_notional), 6)
+    qty = min(float(current_shares), float(current_shares) * sell_notional / current_notional)
+    return int(qty * 1e6) / 1e6
 
 
 def default_portfolio_state(total_equity: float = DEFAULT_PORTFOLIO_TOTAL_EQUITY) -> dict[str, Any]:
@@ -367,7 +368,6 @@ def build_rebalance_plan(
                     action_reason = f"sell existing holding because it is outside the selected top-{max_positions}"
 
         target_weight = target_notional / total_value if total_value > 0 else 0.0
-        target_notional = _round_money(total_value * target_weight)
         delta_notional = _round_money(target_notional - current_notional)
         side = "skip" if skipped else "buy" if delta_notional > 0.01 else "sell" if delta_notional < -0.01 else "hold"
         estimated_sell_qty = None
